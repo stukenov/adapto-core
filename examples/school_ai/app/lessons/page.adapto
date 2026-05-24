@@ -1,0 +1,41 @@
+<route>
+  path: "/lessons/[id]"
+  layout: "school"
+  auth: required
+  tenant: required
+  permission: "lessons.read"
+</route>
+
+<script lang="rust">
+  prop id: Uuid
+
+  state lesson: Lesson
+  state transcript: String = ""
+  state ai_summary: Option<String> = None
+
+  load async fn load(ctx: Ctx) {
+    lesson = LessonRepo::find(ctx.tenant_id, id).await?;
+    transcript = lesson.transcript.clone();
+  }
+
+  #[permission("lessons.update")]
+  #[audit("lesson.status.changed")]
+  action async fn set_status(status: String, ctx: Ctx) {
+    lesson.status = status;
+  }
+</script>
+
+<template>
+  <div>
+    <h1>{lesson.title}</h1>
+    <p>Status: {lesson.status}</p>
+    <button on:click="set_status('done')">Mark Done</button>
+
+    {#if ai_summary}
+      <div>
+        <h2>AI Summary</h2>
+        <p>{ai_summary}</p>
+      </div>
+    {/if}
+  </div>
+</template>

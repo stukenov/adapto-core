@@ -1,0 +1,272 @@
+/* ==========================================================================
+   Adapto UI — Button
+   .au-btn with variants, sizes, states, and icon support.
+   ========================================================================== */
+
+.au-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--au-space-2);
+  padding-block: var(--au-space-2);
+  padding-inline: var(--au-space-4);
+  font-family: var(--au-font-family);
+  font-size: var(--au-text-base);
+  font-weight: var(--au-weight-medium);
+  line-height: var(--au-leading-tight);
+  text-align: center;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: var(--au-radius-md);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  transition:
+    background-color var(--au-duration-fast) var(--au-ease-default),
+    border-color var(--au-duration-fast) var(--au-ease-default),
+    color var(--au-duration-fast) var(--au-ease-default),
+    box-shadow var(--au-duration-fast) var(--au-ease-default),
+    transform var(--au-duration-fast) var(--au-ease-default),
+    opacity var(--au-duration-fast) var(--au-ease-default);
+}
+
+/* -----------------------------------------------------------------------
+   Variant: Primary
+   ----------------------------------------------------------------------- */
+
+.au-btn--primary {
+  background-color: var(--au-color-blue);
+  color: #FFFFFF;
+}
+
+.au-btn--primary:hover {
+  background-color: #0066D6;
+}
+
+.au-btn--primary:active {
+  background-color: #0055B3;
+  transform: scale(0.98);
+}
+
+/* -----------------------------------------------------------------------
+   Variant: Secondary
+   ----------------------------------------------------------------------- */
+
+.au-btn--secondary {
+  background-color: var(--au-gray-100);
+  color: var(--au-color-text);
+}
+
+.au-btn--secondary:hover {
+  background-color: var(--au-gray-200);
+}
+
+.au-btn--secondary:active {
+  background-color: var(--au-gray-300);
+  transform: scale(0.98);
+}
+
+/* -----------------------------------------------------------------------
+   Variant: Destructive
+   ----------------------------------------------------------------------- */
+
+.au-btn--destructive {
+  background-color: var(--au-color-red);
+  color: #FFFFFF;
+}
+
+.au-btn--destructive:hover {
+  background-color: #E0342B;
+}
+
+.au-btn--destructive:active {
+  background-color: #C52D25;
+  transform: scale(0.98);
+}
+
+/* -----------------------------------------------------------------------
+   Variant: Ghost
+   ----------------------------------------------------------------------- */
+
+.au-btn--ghost {
+  background-color: transparent;
+  color: var(--au-color-blue);
+}
+
+.au-btn--ghost:hover {
+  background-color: var(--au-color-info-tint);
+}
+
+.au-btn--ghost:active {
+  background-color: var(--au-color-info-tint);
+  transform: scale(0.98);
+}
+
+/* -----------------------------------------------------------------------
+   Variant: Outline
+   ----------------------------------------------------------------------- */
+
+.au-btn--outline {
+  background-color: transparent;
+  color: var(--au-color-blue);
+  border-color: var(--au-color-blue);
+}
+
+.au-btn--outline:hover {
+  background-color: var(--au-color-info-tint);
+}
+
+.au-btn--outline:active {
+  background-color: var(--au-color-info-tint);
+  transform: scale(0.98);
+}
+
+/* -----------------------------------------------------------------------
+   Sizes
+   ----------------------------------------------------------------------- */
+
+.au-btn--sm {
+  padding-block: var(--au-space-1);
+  padding-inline: var(--au-space-3);
+  font-size: var(--au-text-sm);
+  border-radius: var(--au-radius-sm);
+  min-height: 28px;
+}
+
+.au-btn {
+  min-height: 36px;
+}
+
+.au-btn--lg {
+  padding-block: var(--au-space-3);
+  padding-inline: var(--au-space-6);
+  font-size: var(--au-text-lg);
+  border-radius: var(--au-radius-lg);
+  min-height: 48px;
+}
+
+/* -----------------------------------------------------------------------
+   States
+   ----------------------------------------------------------------------- */
+
+.au-btn:focus-visible {
+  outline: 2px solid var(--au-color-focus);
+  outline-offset: 2px;
+}
+
+.au-btn:disabled,
+.au-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* -----------------------------------------------------------------------
+   Icon support
+   ----------------------------------------------------------------------- */
+
+.au-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+
+.au-btn--icon-only {
+  padding-inline: var(--au-space-2);
+  aspect-ratio: 1;
+}
+
+/* -----------------------------------------------------------------------
+   Loading state
+   ----------------------------------------------------------------------- */
+
+.au-btn--loading {
+  color: transparent;
+  pointer-events: none;
+}
+
+.au-btn--loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-color: var(--au-color-text-inverse) transparent var(--au-color-text-inverse) transparent;
+  border-radius: var(--au-radius-full);
+  animation: au-spin 0.6s linear infinite;
+}
+
+.au-btn--secondary.au-btn--loading::after,
+.au-btn--ghost.au-btn--loading::after,
+.au-btn--outline.au-btn--loading::after {
+  border-color: var(--au-color-text) transparent var(--au-color-text) transparent;
+}
+
+@keyframes au-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Button group
+   ----------------------------------------------------------------------- */
+
+.au-btn-group {
+  display: inline-flex;
+}
+
+.au-btn-group > .au-btn {
+  border-radius: 0;
+}
+
+.au-btn-group > .au-btn:first-child {
+  border-start-start-radius: var(--au-radius-md);
+  border-end-start-radius: var(--au-radius-md);
+}
+
+.au-btn-group > .au-btn:last-child {
+  border-start-end-radius: var(--au-radius-md);
+  border-end-end-radius: var(--au-radius-md);
+}
+
+.au-btn-group > .au-btn + .au-btn {
+  margin-inline-start: -1px;
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-btn {
+    transition: none;
+  }
+
+  .au-btn:active {
+    transform: none;
+  }
+
+  .au-btn--loading::after {
+    animation-duration: 1.5s;
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Print
+   ----------------------------------------------------------------------- */
+
+@media print {
+  .au-btn {
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+  }
+}

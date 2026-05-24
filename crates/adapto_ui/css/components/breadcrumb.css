@@ -1,0 +1,89 @@
+/* ==========================================================================
+   Adapto UI — Breadcrumb
+   Navigational path indicator.
+   ========================================================================== */
+
+.au-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--au-space-1);
+  font-size: var(--au-text-sm);
+  color: var(--au-color-text-secondary);
+}
+
+.au-breadcrumb__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--au-space-1);
+}
+
+.au-breadcrumb__link {
+  color: var(--au-color-text-secondary);
+  cursor: pointer;
+  border-radius: var(--au-radius-sm);
+  padding: var(--au-space-1) var(--au-space-1);
+  transition: color var(--au-duration-fast) var(--au-ease-default);
+}
+
+.au-breadcrumb__link:hover {
+  color: var(--au-color-blue);
+}
+
+.au-breadcrumb__link:focus-visible {
+  outline: 2px solid var(--au-color-focus);
+  outline-offset: 2px;
+}
+
+/* Separator */
+.au-breadcrumb__separator {
+  color: var(--au-color-text-tertiary);
+  font-size: var(--au-text-xs);
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.au-breadcrumb__separator::before {
+  content: "/";
+}
+
+/* Current (last) item — not a link */
+.au-breadcrumb__item:last-child .au-breadcrumb__link {
+  color: var(--au-color-text);
+  font-weight: var(--au-weight-medium);
+  cursor: default;
+  pointer-events: none;
+}
+
+/* -----------------------------------------------------------------------
+   Collapsed breadcrumb — ellipsis for long paths
+   ----------------------------------------------------------------------- */
+
+.au-breadcrumb__ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: var(--au-text-sm);
+  color: var(--au-color-text-tertiary);
+  cursor: pointer;
+  border-radius: var(--au-radius-sm);
+  transition: background-color var(--au-duration-fast) var(--au-ease-default);
+}
+
+.au-breadcrumb__ellipsis:hover {
+  background-color: var(--au-color-bg-secondary);
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-breadcrumb__link,
+  .au-breadcrumb__ellipsis {
+    transition: none;
+  }
+}

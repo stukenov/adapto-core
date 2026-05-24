@@ -1,0 +1,151 @@
+/* ==========================================================================
+   Adapto UI — Toggle
+   Pure CSS iOS-style switch built on a native checkbox.
+   Accessible: the underlying <input type="checkbox"> provides semantics.
+   ========================================================================== */
+
+.au-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  gap: var(--au-space-3);
+  user-select: none;
+}
+
+.au-toggle__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.au-toggle__track {
+  position: relative;
+  width: 51px;
+  height: 31px;
+  background-color: var(--au-gray-200);
+  border-radius: var(--au-radius-full);
+  flex-shrink: 0;
+  transition: background-color var(--au-duration-normal) var(--au-ease-default);
+}
+
+.au-toggle__thumb {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  width: 27px;
+  height: 27px;
+  background-color: #FFFFFF;
+  border-radius: var(--au-radius-full);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.15),
+    0 1px 1px rgba(0, 0, 0, 0.06);
+  transition:
+    transform var(--au-duration-normal) var(--au-ease-spring),
+    box-shadow var(--au-duration-fast) var(--au-ease-default);
+}
+
+/* -----------------------------------------------------------------------
+   Checked state
+   ----------------------------------------------------------------------- */
+
+.au-toggle__input:checked + .au-toggle__track {
+  background-color: var(--au-color-green);
+}
+
+.au-toggle__input:checked + .au-toggle__track .au-toggle__thumb {
+  transform: translateX(20px);
+}
+
+/* RTL support */
+[dir="rtl"] .au-toggle__input:checked + .au-toggle__track .au-toggle__thumb {
+  transform: translateX(-20px);
+}
+
+/* -----------------------------------------------------------------------
+   Focus state
+   ----------------------------------------------------------------------- */
+
+.au-toggle__input:focus-visible + .au-toggle__track {
+  outline: 2px solid var(--au-color-focus);
+  outline-offset: 2px;
+}
+
+/* -----------------------------------------------------------------------
+   Hover
+   ----------------------------------------------------------------------- */
+
+.au-toggle:hover .au-toggle__thumb {
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* -----------------------------------------------------------------------
+   Active press
+   ----------------------------------------------------------------------- */
+
+.au-toggle__input:active + .au-toggle__track .au-toggle__thumb {
+  width: 31px;
+}
+
+.au-toggle__input:checked:active + .au-toggle__track .au-toggle__thumb {
+  transform: translateX(16px);
+}
+
+/* -----------------------------------------------------------------------
+   Disabled
+   ----------------------------------------------------------------------- */
+
+.au-toggle__input:disabled + .au-toggle__track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.au-toggle:has(.au-toggle__input:disabled) {
+  cursor: not-allowed;
+}
+
+/* -----------------------------------------------------------------------
+   Label
+   ----------------------------------------------------------------------- */
+
+.au-toggle__label {
+  font-size: var(--au-text-base);
+  color: var(--au-color-text);
+}
+
+/* -----------------------------------------------------------------------
+   Small size
+   ----------------------------------------------------------------------- */
+
+.au-toggle--sm .au-toggle__track {
+  width: 40px;
+  height: 24px;
+}
+
+.au-toggle--sm .au-toggle__thumb {
+  width: 20px;
+  height: 20px;
+}
+
+.au-toggle--sm .au-toggle__input:checked + .au-toggle__track .au-toggle__thumb {
+  transform: translateX(16px);
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-toggle__track,
+  .au-toggle__thumb {
+    transition: none;
+  }
+}

@@ -1,0 +1,38 @@
+/* ==========================================================================
+   Adapto UI — Main Entry
+   Import this single file to get the full component library.
+
+   Layer order ensures correct cascade:
+   1. Reset — baseline normalization
+   2. Tokens — design system variables
+   3. Typography — text styles
+   4. Components — interactive elements
+   5. Utilities — overrides (highest specificity intent)
+   ========================================================================== */
+
+/* Base */
+@import "base/reset.css";
+@import "base/tokens.css";
+@import "base/typography.css";
+
+/* Components */
+@import "components/button.css";
+@import "components/input.css";
+@import "components/card.css";
+@import "components/badge.css";
+@import "components/alert.css";
+@import "components/modal.css";
+@import "components/table.css";
+@import "components/nav.css";
+@import "components/toggle.css";
+@import "components/avatar.css";
+@import "components/tooltip.css";
+@import "components/breadcrumb.css";
+@import "components/progress.css";
+@import "components/dropdown.css";
+@import "components/form-group.css";
+
+/* Utilities */
+@import "utilities/layout.css";
+@import "utilities/spacing.css";
+@import "utilities/visibility.css";

@@ -1,0 +1,265 @@
+/* ==========================================================================
+   Adapto UI — Design Tokens
+   Every visual decision flows from these properties.
+   Override any token on :root or a scoped container to theme the system.
+   ========================================================================== */
+
+:root {
+  /* -----------------------------------------------------------------------
+     Color — System Palette
+     Apple-derived semantic colors with full light/dark awareness.
+     ----------------------------------------------------------------------- */
+
+  /* Accent */
+  --au-color-blue:        #007AFF;
+  --au-color-green:       #34C759;
+  --au-color-red:         #FF3B30;
+  --au-color-orange:      #FF9500;
+  --au-color-yellow:      #FFCC00;
+  --au-color-teal:        #5AC8FA;
+  --au-color-purple:      #AF52DE;
+  --au-color-pink:        #FF2D55;
+
+  /* Gray scale — six perceptual steps */
+  --au-gray-50:           #F5F5F7;
+  --au-gray-100:          #E8E8ED;
+  --au-gray-200:          #D1D1D6;
+  --au-gray-300:          #AEAEB2;
+  --au-gray-400:          #8E8E93;
+  --au-gray-500:          #636366;
+  --au-gray-600:          #48484A;
+  --au-gray-700:          #3A3A3C;
+  --au-gray-800:          #2C2C2E;
+  --au-gray-900:          #1D1D1F;
+
+  /* Semantic surfaces */
+  --au-color-bg:          #FFFFFF;
+  --au-color-bg-secondary: var(--au-gray-50);
+  --au-color-bg-tertiary: var(--au-gray-100);
+  --au-color-surface:     #FFFFFF;
+  --au-color-surface-elevated: #FFFFFF;
+
+  /* Semantic text */
+  --au-color-text:        var(--au-gray-900);
+  --au-color-text-secondary: var(--au-gray-500);
+  --au-color-text-tertiary:  var(--au-gray-400);
+  --au-color-text-inverse: #FFFFFF;
+
+  /* Semantic borders */
+  --au-color-border:      var(--au-gray-200);
+  --au-color-border-strong: var(--au-gray-300);
+
+  /* Semantic states */
+  --au-color-focus:       var(--au-color-blue);
+  --au-color-info:        var(--au-color-blue);
+  --au-color-success:     var(--au-color-green);
+  --au-color-warning:     var(--au-color-orange);
+  --au-color-error:       var(--au-color-red);
+
+  /* Interactive tints — softer backgrounds for alerts, badges */
+  --au-color-info-tint:    #E5F2FF;
+  --au-color-success-tint: #E8FAF0;
+  --au-color-warning-tint: #FFF4E5;
+  --au-color-error-tint:   #FFE5E5;
+
+  /* -----------------------------------------------------------------------
+     Spacing — 4px base unit
+     ----------------------------------------------------------------------- */
+
+  --au-space-1:   4px;
+  --au-space-2:   8px;
+  --au-space-3:   12px;
+  --au-space-4:   16px;
+  --au-space-5:   20px;
+  --au-space-6:   24px;
+  --au-space-8:   32px;
+  --au-space-10:  40px;
+  --au-space-12:  48px;
+  --au-space-16:  64px;
+
+  /* -----------------------------------------------------------------------
+     Border Radius
+     ----------------------------------------------------------------------- */
+
+  --au-radius-sm:   6px;
+  --au-radius-md:   10px;
+  --au-radius-lg:   14px;
+  --au-radius-xl:   20px;
+  --au-radius-full: 9999px;
+
+  /* -----------------------------------------------------------------------
+     Shadows — Multi-layer, Apple-style depth
+     ----------------------------------------------------------------------- */
+
+  --au-shadow-sm:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 1px 3px rgba(0, 0, 0, 0.06);
+
+  --au-shadow-md:
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.08);
+
+  --au-shadow-lg:
+    0 4px 8px rgba(0, 0, 0, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.12);
+
+  --au-shadow-xl:
+    0 8px 16px rgba(0, 0, 0, 0.06),
+    0 16px 48px rgba(0, 0, 0, 0.16);
+
+  /* -----------------------------------------------------------------------
+     Typography
+     ----------------------------------------------------------------------- */
+
+  --au-font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Display',
+    'SF Pro Text',
+    'Inter',
+    system-ui,
+    -system-ui,
+    sans-serif;
+
+  --au-font-mono:
+    'SF Mono',
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+
+  /* Sizes — optical scale tuned for screens */
+  --au-text-xs:   0.6875rem;  /* 11px */
+  --au-text-sm:   0.8125rem;  /* 13px */
+  --au-text-base: 0.9375rem;  /* 15px */
+  --au-text-lg:   1.0625rem;  /* 17px */
+  --au-text-xl:   1.25rem;    /* 20px */
+  --au-text-2xl:  1.5rem;     /* 24px */
+  --au-text-3xl:  1.75rem;    /* 28px */
+  --au-text-4xl:  2.125rem;   /* 34px */
+
+  /* Line heights — tighter for headings, looser for body */
+  --au-leading-tight:  1.2;
+  --au-leading-normal: 1.5;
+  --au-leading-loose:  1.7;
+
+  /* Weights */
+  --au-weight-regular:  400;
+  --au-weight-medium:   500;
+  --au-weight-semibold: 600;
+  --au-weight-bold:     700;
+
+  /* Letter spacing */
+  --au-tracking-tight:  -0.022em;
+  --au-tracking-normal:  0;
+  --au-tracking-wide:    0.02em;
+
+  /* -----------------------------------------------------------------------
+     Motion — Apple-style cubic-bezier curves
+     ----------------------------------------------------------------------- */
+
+  --au-duration-fast:   150ms;
+  --au-duration-normal: 250ms;
+  --au-duration-slow:   350ms;
+
+  --au-ease-default:    cubic-bezier(0.25, 0.1, 0.25, 1.0);
+  --au-ease-in:         cubic-bezier(0.42, 0, 1, 1);
+  --au-ease-out:        cubic-bezier(0, 0, 0.58, 1);
+  --au-ease-in-out:     cubic-bezier(0.42, 0, 0.58, 1);
+  --au-ease-spring:     cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  /* -----------------------------------------------------------------------
+     Z-Index scale
+     ----------------------------------------------------------------------- */
+
+  --au-z-base:     0;
+  --au-z-dropdown: 100;
+  --au-z-sticky:   200;
+  --au-z-overlay:  300;
+  --au-z-modal:    400;
+  --au-z-toast:    500;
+  --au-z-tooltip:  600;
+}
+
+/* =========================================================================
+   Dark Mode
+   ========================================================================= */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Adjusted accent colors for dark backgrounds */
+    --au-color-blue:        #0A84FF;
+    --au-color-green:       #30D158;
+    --au-color-red:         #FF453A;
+    --au-color-orange:      #FF9F0A;
+    --au-color-yellow:      #FFD60A;
+    --au-color-teal:        #64D2FF;
+    --au-color-purple:      #BF5AF2;
+    --au-color-pink:        #FF375F;
+
+    /* Gray scale — inverted */
+    --au-gray-50:           #1C1C1E;
+    --au-gray-100:          #2C2C2E;
+    --au-gray-200:          #3A3A3C;
+    --au-gray-300:          #48484A;
+    --au-gray-400:          #636366;
+    --au-gray-500:          #8E8E93;
+    --au-gray-600:          #AEAEB2;
+    --au-gray-700:          #C7C7CC;
+    --au-gray-800:          #D1D1D6;
+    --au-gray-900:          #E5E5EA;
+
+    /* Surfaces */
+    --au-color-bg:           #000000;
+    --au-color-bg-secondary: #1C1C1E;
+    --au-color-bg-tertiary:  #2C2C2E;
+    --au-color-surface:      #1C1C1E;
+    --au-color-surface-elevated: #2C2C2E;
+
+    /* Text */
+    --au-color-text:          #F5F5F7;
+    --au-color-text-secondary: #8E8E93;
+    --au-color-text-tertiary:  #636366;
+    --au-color-text-inverse:   #1D1D1F;
+
+    /* Borders */
+    --au-color-border:        #3A3A3C;
+    --au-color-border-strong:  #48484A;
+
+    /* Interactive tints — dark variants */
+    --au-color-info-tint:    rgba(10, 132, 255, 0.16);
+    --au-color-success-tint: rgba(48, 209, 88, 0.16);
+    --au-color-warning-tint: rgba(255, 159, 10, 0.16);
+    --au-color-error-tint:   rgba(255, 69, 58, 0.16);
+
+    /* Shadows — subtler in dark mode */
+    --au-shadow-sm:
+      0 1px 2px rgba(0, 0, 0, 0.2),
+      0 1px 3px rgba(0, 0, 0, 0.3);
+
+    --au-shadow-md:
+      0 2px 4px rgba(0, 0, 0, 0.2),
+      0 4px 12px rgba(0, 0, 0, 0.4);
+
+    --au-shadow-lg:
+      0 4px 8px rgba(0, 0, 0, 0.2),
+      0 8px 24px rgba(0, 0, 0, 0.5);
+
+    --au-shadow-xl:
+      0 8px 16px rgba(0, 0, 0, 0.3),
+      0 16px 48px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* =========================================================================
+   Forced high-contrast overrides
+   ========================================================================= */
+
+@media (forced-colors: active) {
+  :root {
+    --au-color-focus: Highlight;
+    --au-color-border: ButtonBorder;
+    --au-color-text: ButtonText;
+  }
+}

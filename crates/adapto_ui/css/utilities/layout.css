@@ -1,0 +1,229 @@
+/* ==========================================================================
+   Adapto UI — Layout Utilities
+   Flex, grid helpers, container, and stack patterns.
+   ========================================================================== */
+
+/* -----------------------------------------------------------------------
+   Container
+   ----------------------------------------------------------------------- */
+
+.au-container {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: var(--au-space-4);
+}
+
+.au-container--sm {
+  max-width: 640px;
+}
+
+.au-container--md {
+  max-width: 768px;
+}
+
+.au-container--lg {
+  max-width: 1024px;
+}
+
+.au-container--xl {
+  max-width: 1280px;
+}
+
+.au-container--full {
+  max-width: none;
+}
+
+/* -----------------------------------------------------------------------
+   Flex
+   ----------------------------------------------------------------------- */
+
+.au-flex {
+  display: flex;
+}
+
+.au-flex--inline {
+  display: inline-flex;
+}
+
+.au-flex--wrap {
+  flex-wrap: wrap;
+}
+
+.au-flex--col {
+  flex-direction: column;
+}
+
+.au-flex--row-reverse {
+  flex-direction: row-reverse;
+}
+
+.au-flex--col-reverse {
+  flex-direction: column-reverse;
+}
+
+/* Alignment */
+.au-items-start    { align-items: flex-start; }
+.au-items-center   { align-items: center; }
+.au-items-end      { align-items: flex-end; }
+.au-items-stretch  { align-items: stretch; }
+.au-items-baseline { align-items: baseline; }
+
+.au-justify-start   { justify-content: flex-start; }
+.au-justify-center  { justify-content: center; }
+.au-justify-end     { justify-content: flex-end; }
+.au-justify-between { justify-content: space-between; }
+.au-justify-around  { justify-content: space-around; }
+.au-justify-evenly  { justify-content: space-evenly; }
+
+.au-self-start   { align-self: flex-start; }
+.au-self-center  { align-self: center; }
+.au-self-end     { align-self: flex-end; }
+.au-self-stretch { align-self: stretch; }
+
+/* Flex children */
+.au-flex-1     { flex: 1 1 0%; }
+.au-flex-auto  { flex: 1 1 auto; }
+.au-flex-none  { flex: none; }
+.au-flex-grow  { flex-grow: 1; }
+.au-flex-shrink-0 { flex-shrink: 0; }
+
+/* Gap */
+.au-gap-1  { gap: var(--au-space-1); }
+.au-gap-2  { gap: var(--au-space-2); }
+.au-gap-3  { gap: var(--au-space-3); }
+.au-gap-4  { gap: var(--au-space-4); }
+.au-gap-5  { gap: var(--au-space-5); }
+.au-gap-6  { gap: var(--au-space-6); }
+.au-gap-8  { gap: var(--au-space-8); }
+.au-gap-10 { gap: var(--au-space-10); }
+.au-gap-12 { gap: var(--au-space-12); }
+
+/* -----------------------------------------------------------------------
+   Grid
+   ----------------------------------------------------------------------- */
+
+.au-grid {
+  display: grid;
+  gap: var(--au-space-4);
+}
+
+.au-grid--2 { grid-template-columns: repeat(2, 1fr); }
+.au-grid--3 { grid-template-columns: repeat(3, 1fr); }
+.au-grid--4 { grid-template-columns: repeat(4, 1fr); }
+
+.au-grid--auto-fill {
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+
+.au-grid--auto-fit {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.au-col-span-2 { grid-column: span 2; }
+.au-col-span-3 { grid-column: span 3; }
+.au-col-span-4 { grid-column: span 4; }
+.au-col-span-full { grid-column: 1 / -1; }
+
+/* -----------------------------------------------------------------------
+   Stack — vertical rhythm with consistent spacing
+   ----------------------------------------------------------------------- */
+
+.au-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.au-stack--1 { gap: var(--au-space-1); }
+.au-stack--2 { gap: var(--au-space-2); }
+.au-stack--3 { gap: var(--au-space-3); }
+.au-stack--4 { gap: var(--au-space-4); }
+.au-stack--6 { gap: var(--au-space-6); }
+.au-stack--8 { gap: var(--au-space-8); }
+
+/* -----------------------------------------------------------------------
+   Cluster — horizontal wrapping with gap
+   ----------------------------------------------------------------------- */
+
+.au-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--au-space-3);
+  align-items: center;
+}
+
+/* -----------------------------------------------------------------------
+   Center
+   ----------------------------------------------------------------------- */
+
+.au-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* -----------------------------------------------------------------------
+   Divider
+   ----------------------------------------------------------------------- */
+
+.au-divider {
+  border: none;
+  border-block-start: 1px solid var(--au-color-border);
+  margin-block: var(--au-space-4);
+}
+
+.au-divider--thick {
+  border-block-start-width: 2px;
+}
+
+/* -----------------------------------------------------------------------
+   Aspect ratio
+   ----------------------------------------------------------------------- */
+
+.au-aspect-square  { aspect-ratio: 1; }
+.au-aspect-video   { aspect-ratio: 16 / 9; }
+.au-aspect-photo   { aspect-ratio: 4 / 3; }
+
+/* -----------------------------------------------------------------------
+   Width/height helpers
+   ----------------------------------------------------------------------- */
+
+.au-w-full    { width: 100%; }
+.au-h-full    { height: 100%; }
+.au-min-h-screen { min-height: 100dvh; }
+
+/* -----------------------------------------------------------------------
+   Overflow
+   ----------------------------------------------------------------------- */
+
+.au-overflow-hidden  { overflow: hidden; }
+.au-overflow-auto    { overflow: auto; }
+.au-overflow-x-auto  { overflow-x: auto; }
+.au-overflow-y-auto  { overflow-y: auto; }
+
+/* -----------------------------------------------------------------------
+   Position
+   ----------------------------------------------------------------------- */
+
+.au-relative { position: relative; }
+.au-absolute { position: absolute; }
+.au-fixed    { position: fixed; }
+.au-sticky   { position: sticky; }
+
+.au-inset-0 { inset: 0; }
+
+/* -----------------------------------------------------------------------
+   Responsive collapse — stack columns on mobile
+   ----------------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+  .au-grid--2,
+  .au-grid--3,
+  .au-grid--4 {
+    grid-template-columns: 1fr;
+  }
+
+  .au-container {
+    padding-inline: var(--au-space-4);
+  }
+}

@@ -1,0 +1,134 @@
+/* ==========================================================================
+   Adapto UI — Alert
+   Contextual messages: info, success, warning, error.
+   ========================================================================== */
+
+.au-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--au-space-3);
+  padding: var(--au-space-4);
+  border-radius: var(--au-radius-md);
+  font-size: var(--au-text-sm);
+  line-height: var(--au-leading-normal);
+  position: relative;
+}
+
+/* -----------------------------------------------------------------------
+   Variants
+   ----------------------------------------------------------------------- */
+
+.au-alert--info {
+  background-color: var(--au-color-info-tint);
+  color: var(--au-color-blue);
+  border: 1px solid rgba(0, 122, 255, 0.15);
+}
+
+.au-alert--success {
+  background-color: var(--au-color-success-tint);
+  color: var(--au-color-green);
+  border: 1px solid rgba(52, 199, 89, 0.15);
+}
+
+.au-alert--warning {
+  background-color: var(--au-color-warning-tint);
+  color: var(--au-color-orange);
+  border: 1px solid rgba(255, 149, 0, 0.15);
+}
+
+.au-alert--error {
+  background-color: var(--au-color-error-tint);
+  color: var(--au-color-red);
+  border: 1px solid rgba(255, 59, 48, 0.15);
+}
+
+/* -----------------------------------------------------------------------
+   Sections
+   ----------------------------------------------------------------------- */
+
+.au-alert__icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-block-start: 1px;
+}
+
+.au-alert__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.au-alert__title {
+  font-weight: var(--au-weight-semibold);
+  margin-block-end: var(--au-space-1);
+}
+
+.au-alert__message {
+  opacity: 0.85;
+}
+
+/* -----------------------------------------------------------------------
+   Dismiss button
+   ----------------------------------------------------------------------- */
+
+.au-alert__dismiss {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--au-radius-sm);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--au-duration-fast) var(--au-ease-default);
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0;
+}
+
+.au-alert__dismiss:hover {
+  opacity: 1;
+}
+
+.au-alert__dismiss:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* -----------------------------------------------------------------------
+   Inline variant — no background, left border accent
+   ----------------------------------------------------------------------- */
+
+.au-alert--inline {
+  background: none;
+  border: none;
+  border-inline-start: 3px solid currentColor;
+  border-radius: 0;
+  padding-inline-start: var(--au-space-4);
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-alert__dismiss {
+    transition: none;
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Print
+   ----------------------------------------------------------------------- */
+
+@media print {
+  .au-alert {
+    border: 1px solid currentColor;
+    background: none;
+  }
+}

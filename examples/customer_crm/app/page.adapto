@@ -1,0 +1,74 @@
+<route>
+  path: "/customers"
+  layout: "dashboard"
+  auth: required
+  tenant: required
+  permission: "customers.read"
+</route>
+
+<script lang="rust">
+  state query: String = ""
+  state customers: Vec<Customer> = []
+
+  action async fn search(ctx: Ctx) {
+    ctx.require("customers.read")?;
+    customers = CustomerRepo::search(ctx.tenant_id, query.clone()).await?;
+  }
+
+  #[permission("customers.delete")]
+  #[audit("customer.deleted")]
+  action async fn delete(id: Uuid, ctx: Ctx) {
+    CustomerRepo::delete(ctx.tenant_id, id).await?;
+  }
+</script>
+
+<template>
+  <div class="customer-list">
+    <h1>Customers</h1>
+    <input bind:value="query" on:input="search" />
+    {#each customers as customer}
+      <div class="customer-row">
+        <span>{customer.name}</span>
+        <span>{customer.email}</span>
+        {#can "customers.delete"}
+          <button on:click="delete(customer.id)">Delete</button>
+        {/can}
+      </div>
+    {/each}
+  </div>
+</template>
+
+<style scoped>
+  .customer-list {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+  .customer-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e5e5e5;
+  }
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+  }
+  input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+  }
+  button {
+    padding: 0.375rem 0.75rem;
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+  }
+</style>

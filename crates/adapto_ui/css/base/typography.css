@@ -1,0 +1,264 @@
+/* ==========================================================================
+   Adapto UI — Typography
+   A clear, legible typographic scale rooted in SF Pro proportions.
+   ========================================================================== */
+
+body {
+  font-family: var(--au-font-family);
+  font-size: var(--au-text-base);
+  font-weight: var(--au-weight-regular);
+  line-height: var(--au-leading-normal);
+  color: var(--au-color-text);
+  background-color: var(--au-color-bg);
+}
+
+/* -----------------------------------------------------------------------
+   Headings — weighted for visual hierarchy
+   ----------------------------------------------------------------------- */
+
+.au-h1,
+.au-h2,
+.au-h3,
+.au-h4,
+.au-h5,
+.au-h6 {
+  font-family: var(--au-font-family);
+  line-height: var(--au-leading-tight);
+  letter-spacing: var(--au-tracking-tight);
+  color: var(--au-color-text);
+}
+
+.au-h1 {
+  font-size: var(--au-text-4xl);
+  font-weight: var(--au-weight-bold);
+}
+
+.au-h2 {
+  font-size: var(--au-text-3xl);
+  font-weight: var(--au-weight-bold);
+}
+
+.au-h3 {
+  font-size: var(--au-text-2xl);
+  font-weight: var(--au-weight-semibold);
+}
+
+.au-h4 {
+  font-size: var(--au-text-xl);
+  font-weight: var(--au-weight-semibold);
+}
+
+.au-h5 {
+  font-size: var(--au-text-lg);
+  font-weight: var(--au-weight-medium);
+}
+
+.au-h6 {
+  font-size: var(--au-text-base);
+  font-weight: var(--au-weight-medium);
+}
+
+/* -----------------------------------------------------------------------
+   Body text variants
+   ----------------------------------------------------------------------- */
+
+.au-text-xs   { font-size: var(--au-text-xs); }
+.au-text-sm   { font-size: var(--au-text-sm); }
+.au-text-base { font-size: var(--au-text-base); }
+.au-text-lg   { font-size: var(--au-text-lg); }
+.au-text-xl   { font-size: var(--au-text-xl); }
+
+.au-text-secondary {
+  color: var(--au-color-text-secondary);
+}
+
+.au-text-tertiary {
+  color: var(--au-color-text-tertiary);
+}
+
+.au-text-mono {
+  font-family: var(--au-font-mono);
+}
+
+.au-text-bold {
+  font-weight: var(--au-weight-bold);
+}
+
+.au-text-semibold {
+  font-weight: var(--au-weight-semibold);
+}
+
+.au-text-medium {
+  font-weight: var(--au-weight-medium);
+}
+
+/* -----------------------------------------------------------------------
+   Prose — long-form content styling
+   ----------------------------------------------------------------------- */
+
+.au-prose {
+  font-size: var(--au-text-base);
+  line-height: var(--au-leading-loose);
+  color: var(--au-color-text);
+  max-width: 65ch;
+}
+
+.au-prose h1 {
+  font-size: var(--au-text-4xl);
+  font-weight: var(--au-weight-bold);
+  line-height: var(--au-leading-tight);
+  letter-spacing: var(--au-tracking-tight);
+  margin-block-start: var(--au-space-12);
+  margin-block-end: var(--au-space-6);
+}
+
+.au-prose h2 {
+  font-size: var(--au-text-3xl);
+  font-weight: var(--au-weight-bold);
+  line-height: var(--au-leading-tight);
+  letter-spacing: var(--au-tracking-tight);
+  margin-block-start: var(--au-space-10);
+  margin-block-end: var(--au-space-4);
+}
+
+.au-prose h3 {
+  font-size: var(--au-text-2xl);
+  font-weight: var(--au-weight-semibold);
+  line-height: var(--au-leading-tight);
+  margin-block-start: var(--au-space-8);
+  margin-block-end: var(--au-space-3);
+}
+
+.au-prose h4 {
+  font-size: var(--au-text-xl);
+  font-weight: var(--au-weight-semibold);
+  line-height: var(--au-leading-tight);
+  margin-block-start: var(--au-space-6);
+  margin-block-end: var(--au-space-3);
+}
+
+.au-prose p {
+  margin-block-end: var(--au-space-4);
+}
+
+.au-prose a {
+  color: var(--au-color-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--au-duration-fast) var(--au-ease-default);
+}
+
+.au-prose a:hover {
+  color: var(--au-color-text);
+}
+
+.au-prose strong {
+  font-weight: var(--au-weight-semibold);
+}
+
+.au-prose code {
+  font-family: var(--au-font-mono);
+  font-size: 0.875em;
+  background-color: var(--au-color-bg-tertiary);
+  padding-inline: var(--au-space-1);
+  padding-block: 1px;
+  border-radius: var(--au-radius-sm);
+}
+
+.au-prose pre {
+  font-family: var(--au-font-mono);
+  font-size: var(--au-text-sm);
+  line-height: var(--au-leading-normal);
+  background-color: var(--au-color-bg-secondary);
+  padding: var(--au-space-4);
+  border-radius: var(--au-radius-md);
+  overflow-x: auto;
+  margin-block-end: var(--au-space-4);
+}
+
+.au-prose pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.au-prose blockquote {
+  border-inline-start: 3px solid var(--au-color-border-strong);
+  padding-inline-start: var(--au-space-4);
+  color: var(--au-color-text-secondary);
+  margin-block-end: var(--au-space-4);
+}
+
+.au-prose ul,
+.au-prose ol {
+  padding-inline-start: var(--au-space-6);
+  margin-block-end: var(--au-space-4);
+}
+
+.au-prose ul {
+  list-style: disc;
+}
+
+.au-prose ol {
+  list-style: decimal;
+}
+
+.au-prose li + li {
+  margin-block-start: var(--au-space-2);
+}
+
+.au-prose hr {
+  border: none;
+  border-block-start: 1px solid var(--au-color-border);
+  margin-block: var(--au-space-8);
+}
+
+.au-prose img {
+  border-radius: var(--au-radius-md);
+  margin-block: var(--au-space-4);
+}
+
+/* -----------------------------------------------------------------------
+   Label — form/UI labels
+   ----------------------------------------------------------------------- */
+
+.au-label {
+  font-size: var(--au-text-sm);
+  font-weight: var(--au-weight-medium);
+  color: var(--au-color-text-secondary);
+  letter-spacing: var(--au-tracking-wide);
+}
+
+/* -----------------------------------------------------------------------
+   Caption — auxiliary text
+   ----------------------------------------------------------------------- */
+
+.au-caption {
+  font-size: var(--au-text-xs);
+  color: var(--au-color-text-tertiary);
+  line-height: var(--au-leading-normal);
+}
+
+/* -----------------------------------------------------------------------
+   Truncation
+   ----------------------------------------------------------------------- */
+
+.au-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.au-line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.au-line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

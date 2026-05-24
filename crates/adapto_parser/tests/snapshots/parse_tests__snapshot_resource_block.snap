@@ -1,0 +1,44 @@
+---
+source: crates/adapto_parser/tests/parse_tests.rs
+assertion_line: 1343
+expression: file
+---
+route: ~
+script: ~
+template: ~
+style: ~
+resource:
+  name: Product
+  table: products
+  tenant: Required
+  primary_key: id
+  fields:
+    - name: id
+      ty: Uuid
+      constraints:
+        - Readonly
+      searchable: false
+      readonly: true
+      default: ~
+    - name: name
+      ty: String
+      constraints:
+        - Required
+        - Max: 200
+        - Searchable
+      searchable: true
+      readonly: false
+      default: ~
+    - name: price
+      ty: Decimal
+      constraints:
+        - Required
+      searchable: false
+      readonly: false
+      default: ~
+  permissions:
+    - action: read
+      permission: products.read
+    - action: create
+      permission: products.create
+layout: ~

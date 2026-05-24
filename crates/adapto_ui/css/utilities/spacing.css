@@ -1,0 +1,124 @@
+/* ==========================================================================
+   Adapto UI — Spacing Utilities
+   Margin and padding using the 4px-based spacing scale.
+   Uses logical properties (block/inline) for RTL support.
+   ========================================================================== */
+
+/* -----------------------------------------------------------------------
+   Padding — all sides
+   ----------------------------------------------------------------------- */
+
+.au-p-0  { padding: 0; }
+.au-p-1  { padding: var(--au-space-1); }
+.au-p-2  { padding: var(--au-space-2); }
+.au-p-3  { padding: var(--au-space-3); }
+.au-p-4  { padding: var(--au-space-4); }
+.au-p-5  { padding: var(--au-space-5); }
+.au-p-6  { padding: var(--au-space-6); }
+.au-p-8  { padding: var(--au-space-8); }
+.au-p-10 { padding: var(--au-space-10); }
+.au-p-12 { padding: var(--au-space-12); }
+.au-p-16 { padding: var(--au-space-16); }
+
+/* Padding — inline (horizontal) */
+.au-px-0  { padding-inline: 0; }
+.au-px-1  { padding-inline: var(--au-space-1); }
+.au-px-2  { padding-inline: var(--au-space-2); }
+.au-px-3  { padding-inline: var(--au-space-3); }
+.au-px-4  { padding-inline: var(--au-space-4); }
+.au-px-5  { padding-inline: var(--au-space-5); }
+.au-px-6  { padding-inline: var(--au-space-6); }
+.au-px-8  { padding-inline: var(--au-space-8); }
+.au-px-10 { padding-inline: var(--au-space-10); }
+
+/* Padding — block (vertical) */
+.au-py-0  { padding-block: 0; }
+.au-py-1  { padding-block: var(--au-space-1); }
+.au-py-2  { padding-block: var(--au-space-2); }
+.au-py-3  { padding-block: var(--au-space-3); }
+.au-py-4  { padding-block: var(--au-space-4); }
+.au-py-5  { padding-block: var(--au-space-5); }
+.au-py-6  { padding-block: var(--au-space-6); }
+.au-py-8  { padding-block: var(--au-space-8); }
+.au-py-10 { padding-block: var(--au-space-10); }
+
+/* Padding — individual sides */
+.au-pt-0  { padding-block-start: 0; }
+.au-pt-2  { padding-block-start: var(--au-space-2); }
+.au-pt-4  { padding-block-start: var(--au-space-4); }
+.au-pt-6  { padding-block-start: var(--au-space-6); }
+.au-pt-8  { padding-block-start: var(--au-space-8); }
+
+.au-pb-0  { padding-block-end: 0; }
+.au-pb-2  { padding-block-end: var(--au-space-2); }
+.au-pb-4  { padding-block-end: var(--au-space-4); }
+.au-pb-6  { padding-block-end: var(--au-space-6); }
+.au-pb-8  { padding-block-end: var(--au-space-8); }
+
+.au-ps-0  { padding-inline-start: 0; }
+.au-ps-2  { padding-inline-start: var(--au-space-2); }
+.au-ps-4  { padding-inline-start: var(--au-space-4); }
+.au-ps-6  { padding-inline-start: var(--au-space-6); }
+
+.au-pe-0  { padding-inline-end: 0; }
+.au-pe-2  { padding-inline-end: var(--au-space-2); }
+.au-pe-4  { padding-inline-end: var(--au-space-4); }
+.au-pe-6  { padding-inline-end: var(--au-space-6); }
+
+/* -----------------------------------------------------------------------
+   Margin — all sides
+   ----------------------------------------------------------------------- */
+
+.au-m-0    { margin: 0; }
+.au-m-1    { margin: var(--au-space-1); }
+.au-m-2    { margin: var(--au-space-2); }
+.au-m-3    { margin: var(--au-space-3); }
+.au-m-4    { margin: var(--au-space-4); }
+.au-m-6    { margin: var(--au-space-6); }
+.au-m-8    { margin: var(--au-space-8); }
+.au-m-auto { margin: auto; }
+
+/* Margin — inline (horizontal) */
+.au-mx-0    { margin-inline: 0; }
+.au-mx-1    { margin-inline: var(--au-space-1); }
+.au-mx-2    { margin-inline: var(--au-space-2); }
+.au-mx-3    { margin-inline: var(--au-space-3); }
+.au-mx-4    { margin-inline: var(--au-space-4); }
+.au-mx-6    { margin-inline: var(--au-space-6); }
+.au-mx-auto { margin-inline: auto; }
+
+/* Margin — block (vertical) */
+.au-my-0  { margin-block: 0; }
+.au-my-1  { margin-block: var(--au-space-1); }
+.au-my-2  { margin-block: var(--au-space-2); }
+.au-my-3  { margin-block: var(--au-space-3); }
+.au-my-4  { margin-block: var(--au-space-4); }
+.au-my-6  { margin-block: var(--au-space-6); }
+.au-my-8  { margin-block: var(--au-space-8); }
+
+/* Margin — individual sides */
+.au-mt-0  { margin-block-start: 0; }
+.au-mt-1  { margin-block-start: var(--au-space-1); }
+.au-mt-2  { margin-block-start: var(--au-space-2); }
+.au-mt-3  { margin-block-start: var(--au-space-3); }
+.au-mt-4  { margin-block-start: var(--au-space-4); }
+.au-mt-6  { margin-block-start: var(--au-space-6); }
+.au-mt-8  { margin-block-start: var(--au-space-8); }
+
+.au-mb-0  { margin-block-end: 0; }
+.au-mb-1  { margin-block-end: var(--au-space-1); }
+.au-mb-2  { margin-block-end: var(--au-space-2); }
+.au-mb-3  { margin-block-end: var(--au-space-3); }
+.au-mb-4  { margin-block-end: var(--au-space-4); }
+.au-mb-6  { margin-block-end: var(--au-space-6); }
+.au-mb-8  { margin-block-end: var(--au-space-8); }
+
+.au-ms-0    { margin-inline-start: 0; }
+.au-ms-2    { margin-inline-start: var(--au-space-2); }
+.au-ms-4    { margin-inline-start: var(--au-space-4); }
+.au-ms-auto { margin-inline-start: auto; }
+
+.au-me-0    { margin-inline-end: 0; }
+.au-me-2    { margin-inline-end: var(--au-space-2); }
+.au-me-4    { margin-inline-end: var(--au-space-4); }
+.au-me-auto { margin-inline-end: auto; }

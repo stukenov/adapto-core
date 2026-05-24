@@ -1,0 +1,115 @@
+/* ==========================================================================
+   Adapto UI — Badge
+   Status indicators and count labels.
+   ========================================================================== */
+
+.au-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--au-space-1);
+  padding-block: 2px;
+  padding-inline: var(--au-space-2);
+  font-family: var(--au-font-family);
+  font-size: var(--au-text-xs);
+  font-weight: var(--au-weight-medium);
+  line-height: var(--au-leading-tight);
+  white-space: nowrap;
+  border-radius: var(--au-radius-full);
+  vertical-align: middle;
+}
+
+/* -----------------------------------------------------------------------
+   Variants
+   ----------------------------------------------------------------------- */
+
+.au-badge--default {
+  background-color: var(--au-gray-100);
+  color: var(--au-color-text-secondary);
+}
+
+.au-badge--info {
+  background-color: var(--au-color-info-tint);
+  color: var(--au-color-blue);
+}
+
+.au-badge--success {
+  background-color: var(--au-color-success-tint);
+  color: var(--au-color-green);
+}
+
+.au-badge--warning {
+  background-color: var(--au-color-warning-tint);
+  color: var(--au-color-orange);
+}
+
+.au-badge--error {
+  background-color: var(--au-color-error-tint);
+  color: var(--au-color-red);
+}
+
+/* -----------------------------------------------------------------------
+   Solid variants — stronger emphasis
+   ----------------------------------------------------------------------- */
+
+.au-badge--solid-info {
+  background-color: var(--au-color-blue);
+  color: #FFFFFF;
+}
+
+.au-badge--solid-success {
+  background-color: var(--au-color-green);
+  color: #FFFFFF;
+}
+
+.au-badge--solid-warning {
+  background-color: var(--au-color-orange);
+  color: #FFFFFF;
+}
+
+.au-badge--solid-error {
+  background-color: var(--au-color-red);
+  color: #FFFFFF;
+}
+
+/* -----------------------------------------------------------------------
+   Dot indicator — minimal status
+   ----------------------------------------------------------------------- */
+
+.au-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--au-radius-full);
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+/* -----------------------------------------------------------------------
+   Count — numeric badge
+   ----------------------------------------------------------------------- */
+
+.au-badge--count {
+  min-width: 20px;
+  height: 20px;
+  padding-inline: var(--au-space-1);
+  font-size: 10px;
+  font-weight: var(--au-weight-semibold);
+  background-color: var(--au-color-red);
+  color: #FFFFFF;
+}
+
+/* -----------------------------------------------------------------------
+   Sizes
+   ----------------------------------------------------------------------- */
+
+.au-badge--sm {
+  padding-block: 1px;
+  padding-inline: var(--au-space-1);
+  font-size: 10px;
+}
+
+.au-badge--lg {
+  padding-block: var(--au-space-1);
+  padding-inline: var(--au-space-3);
+  font-size: var(--au-text-sm);
+}

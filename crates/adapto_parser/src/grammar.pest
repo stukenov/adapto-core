@@ -1,0 +1,201 @@
+// Adapto DSL PEG Grammar (reference documentation)
+// This file documents the formal grammar. The runtime parser is hand-written
+// recursive descent for maximum error-reporting quality.
+
+// ---------------------------------------------------------------------------
+// Top-level file structure
+// ---------------------------------------------------------------------------
+
+file = { SOI ~ (block)* ~ EOI }
+
+block = {
+    route_block
+  | script_block
+  | template_block
+  | style_block
+  | resource_block
+  | layout_block
+}
+
+// ---------------------------------------------------------------------------
+// Route block
+// ---------------------------------------------------------------------------
+
+route_block = { "<route>" ~ route_body ~ "</route>" }
+route_body  = { (route_field | NEWLINE | COMMENT)* }
+route_field = { route_key ~ ":" ~ route_value }
+route_key   = {
+    "path" | "method" | "layout" | "page_title"
+  | "auth" | "role" | "permission"
+  | "tenant" | "cache"
+  | "error" | "not_found"
+}
+route_value = { quoted_string | bare_ident }
+
+// ---------------------------------------------------------------------------
+// Script block
+// ---------------------------------------------------------------------------
+
+script_block = { "<script" ~ lang_attr ~ ">" ~ script_body ~ "</script>" }
+lang_attr    = { "lang" ~ "=" ~ "\"rust\"" }
+script_body  = { (script_decl | NEWLINE | COMMENT)* }
+script_decl  = {
+    use_stmt
+  | prop_decl
+  | state_decl
+  | memo_decl
+  | load_decl
+  | action_decl
+  | server_decl
+  | form_decl
+  | ai_action_decl
+  | attr_annotation
+}
+
+use_stmt   = { "use" ~ path ~ ";" }
+prop_decl  = { "prop" ~ ident ~ ":" ~ type_expr ~ ("=" ~ expr)? }
+state_decl = { "state" ~ "secret"? ~ ident ~ ":" ~ type_expr ~ ("=" ~ expr)? }
+memo_decl  = { "memo" ~ ident ~ ":" ~ type_expr ~ "=" ~ expr }
+load_decl  = { "load" ~ "async"? ~ "fn" ~ ident ~ "(" ~ param_list ~ ")" ~ block_body }
+action_decl = { attr_annotation* ~ "action" ~ "async"? ~ "fn"? ~ ident ~ "(" ~ param_list ~ ")" ~ block_body }
+server_decl = { "server" ~ "async"? ~ "fn" ~ ident ~ "(" ~ param_list ~ ")" ~ block_body }
+form_decl   = { "form" ~ ident ~ "{" ~ form_field* ~ "}" }
+ai_action_decl = { "ai" ~ "action" ~ ident ~ "(" ~ param_list ~ ")" ~ "->" ~ type_expr ~ "{" ~ ai_body ~ "}" }
+
+attr_annotation = { "#[" ~ ident ~ "(" ~ quoted_string ~ ")" ~ "]" }
+
+param_list = { (param ~ ("," ~ param)*)? }
+param      = { ident ~ ":" ~ type_expr }
+
+form_field = { ident ~ ":" ~ type_expr ~ field_constraint* }
+field_constraint = { "required" | "optional" | "unique" | "searchable" | "readonly" | min_constraint | max_constraint }
+min_constraint = { "min=" ~ NUMBER }
+max_constraint = { "max=" ~ NUMBER }
+
+ai_body = { (ai_field | NEWLINE | COMMENT)* }
+ai_field = { ai_key ~ ":" ~ ai_value }
+ai_key   = { "model" | "fallback" | "temperature" | "audit" | "pii" | "permission" | "input" }
+ai_value = { quoted_string | bare_ident | NUMBER }
+
+block_body = { "{" ~ rust_code ~ "}" }
+rust_code  = { (!("}" ~ PEEK) ~ ANY)* }
+
+// ---------------------------------------------------------------------------
+// Template block
+// ---------------------------------------------------------------------------
+
+template_block = { "<template>" ~ template_body ~ "</template>" }
+template_body  = { template_node* }
+template_node  = {
+    if_block
+  | each_block
+  | match_block
+  | can_block
+  | unsafe_html
+  | expression
+  | element
+  | component
+  | slot_element
+  | text_node
+}
+
+// Control flow
+if_block    = { "{#if" ~ expr ~ "}" ~ template_body ~ else_if_clause* ~ else_clause? ~ "{/if}" }
+else_if_clause = { "{:else if" ~ expr ~ "}" ~ template_body }
+else_clause    = { "{:else}" ~ template_body }
+
+each_block  = { "{#each" ~ expr ~ "as" ~ ident ~ ("," ~ ident)? ~ "}" ~ template_body ~ "{/each}" }
+match_block = { "{#match" ~ expr ~ "}" ~ when_arm* ~ "{/match}" }
+when_arm    = { "{:when" ~ expr ~ "}" ~ template_body }
+can_block   = { "{#can" ~ quoted_string ~ "}" ~ template_body ~ "{/can}" }
+
+// Expressions
+expression   = { "{" ~ expr ~ "}" }
+unsafe_html  = { "{@html" ~ expr ~ "}" }
+
+// Elements
+element = {
+    "<" ~ tag_name ~ attribute* ~ "/>"            // self-closing
+  | "<" ~ tag_name ~ attribute* ~ ">" ~ template_body ~ "</" ~ tag_name ~ ">"
+}
+component   = { "<" ~ component_name ~ attribute* ~ "island"? ~ "/>" | "<" ~ component_name ~ attribute* ~ "island"? ~ ">" ~ template_body ~ "</" ~ component_name ~ ">" }
+slot_element = { "<slot" ~ ("name=" ~ quoted_string)? ~ "/>" | "<slot" ~ ("name=" ~ quoted_string)? ~ ">" ~ template_body ~ "</slot>" }
+
+tag_name       = { ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "-")* }
+component_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC)* }
+
+// Attributes
+attribute = {
+    event_binding
+  | bind_decl
+  | static_attr
+  | dynamic_attr
+  | boolean_attr
+}
+event_binding = { "on:" ~ event_name ~ event_modifier* ~ "=" ~ quoted_string }
+event_name    = { ident }
+event_modifier = { "." ~ (modifier_name | modifier_value) }
+modifier_name  = { "prevent" | "stop" | "debounce" | "throttle" }
+modifier_value = { NUMBER }
+
+bind_decl = { "bind:" ~ ident ~ "=" ~ quoted_string }
+
+static_attr  = { ident ~ "=" ~ quoted_string }
+dynamic_attr = { ident ~ "=" ~ "{" ~ expr ~ "}" }
+boolean_attr = { ident }
+
+// Text
+text_node = { (!(PEEK ~ ("<" | "{")) ~ ANY)+ }
+
+// ---------------------------------------------------------------------------
+// Style block
+// ---------------------------------------------------------------------------
+
+style_block = { "<style" ~ style_modifier? ~ ">" ~ css_content ~ "</style>" }
+style_modifier = { "scoped" | "global" }
+css_content = { (!("</style>") ~ ANY)* }
+
+// ---------------------------------------------------------------------------
+// Resource block
+// ---------------------------------------------------------------------------
+
+resource_block = { "<resource" ~ resource_attrs ~ ">" ~ resource_body ~ "</resource>" }
+resource_attrs = { ("name=" ~ quoted_string)? ~ ("table=" ~ quoted_string)? }
+resource_body  = { (resource_entry | NEWLINE | COMMENT)* }
+resource_entry = {
+    "tenant:" ~ tenant_level
+  | "primary_key:" ~ ident
+  | resource_field
+  | resource_permission
+}
+resource_field = { "field" ~ ident ~ ":" ~ type_expr ~ field_constraint* ~ ("default=" ~ bare_value)? }
+resource_permission = { "permission" ~ ident ~ ":" ~ quoted_string }
+tenant_level = { "none" | "optional" | "required" }
+
+// ---------------------------------------------------------------------------
+// Layout block
+// ---------------------------------------------------------------------------
+
+layout_block = { "<layout" ~ layout_attrs ~ ">" ~ layout_body ~ "</layout>" }
+layout_attrs = { ("name=" ~ quoted_string)? }
+layout_body  = { (layout_field | NEWLINE | COMMENT)* }
+layout_field = { layout_key ~ ":" ~ layout_value }
+layout_key   = { "auth" | "tenant" }
+layout_value = { bare_ident }
+
+// ---------------------------------------------------------------------------
+// Terminals
+// ---------------------------------------------------------------------------
+
+ident          = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+quoted_string  = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+bare_ident     = @{ (ASCII_ALPHANUMERIC | "_" | "-" | "." | "/")+ }
+bare_value     = @{ (ASCII_ALPHANUMERIC | "_" | "-" | ".")+ }
+type_expr      = @{ (ASCII_ALPHANUMERIC | "_" | "<" | ">" | "[" | "]" | "," | " ")+ }
+expr           = @{ (!("}") ~ ANY)+ }
+path           = @{ (ASCII_ALPHANUMERIC | "_" | ":" | ".")+ }
+NUMBER         = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+
+WHITESPACE = _{ " " | "\t" }
+NEWLINE    = _{ "\r\n" | "\n" }
+COMMENT    = _{ "//" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }

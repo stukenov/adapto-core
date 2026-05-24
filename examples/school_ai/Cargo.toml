@@ -1,0 +1,20 @@
+[package]
+name = "example-school-ai"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+adapto_runtime = { path = "../../crates/adapto_runtime" }
+adapto_compiler = { path = "../../crates/adapto_compiler" }
+adapto_client_protocol = { path = "../../crates/adapto_client_protocol" }
+adapto_parser = { path = "../../crates/adapto_parser" }
+adapto_forms = { path = "../../crates/adapto_forms" }
+adapto_db = { path = "../../crates/adapto_db" }
+adapto_auth = { path = "../../crates/adapto_auth" }
+adapto_audit = { path = "../../crates/adapto_audit" }
+adapto_ai = { path = "../../crates/adapto_ai" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

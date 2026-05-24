@@ -1,0 +1,128 @@
+/* ==========================================================================
+   Adapto UI — Form Group
+   Label + input + help text + error message composition.
+   ========================================================================== */
+
+.au-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--au-space-2);
+}
+
+.au-form-group + .au-form-group {
+  margin-block-start: var(--au-space-5);
+}
+
+/* -----------------------------------------------------------------------
+   Label
+   ----------------------------------------------------------------------- */
+
+.au-form-group__label {
+  font-size: var(--au-text-sm);
+  font-weight: var(--au-weight-medium);
+  color: var(--au-color-text);
+  line-height: var(--au-leading-tight);
+}
+
+.au-form-group__required {
+  color: var(--au-color-red);
+  margin-inline-start: 2px;
+}
+
+/* -----------------------------------------------------------------------
+   Help text — below input, informational
+   ----------------------------------------------------------------------- */
+
+.au-form-group__help {
+  font-size: var(--au-text-xs);
+  color: var(--au-color-text-tertiary);
+  line-height: var(--au-leading-normal);
+}
+
+/* -----------------------------------------------------------------------
+   Error message
+   ----------------------------------------------------------------------- */
+
+.au-form-group__error {
+  font-size: var(--au-text-xs);
+  color: var(--au-color-red);
+  line-height: var(--au-leading-normal);
+  display: flex;
+  align-items: center;
+  gap: var(--au-space-1);
+}
+
+.au-form-group__error-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* -----------------------------------------------------------------------
+   Horizontal layout
+   ----------------------------------------------------------------------- */
+
+.au-form-group--horizontal {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--au-space-4);
+}
+
+.au-form-group--horizontal .au-form-group__label {
+  min-width: 120px;
+  padding-block-start: var(--au-space-2);
+  flex-shrink: 0;
+}
+
+.au-form-group--horizontal .au-form-group__control {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--au-space-2);
+}
+
+/* -----------------------------------------------------------------------
+   Checkbox / Radio group
+   ----------------------------------------------------------------------- */
+
+.au-form-group__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--au-space-3);
+}
+
+.au-form-group__option {
+  display: flex;
+  align-items: center;
+  gap: var(--au-space-2);
+  font-size: var(--au-text-sm);
+  cursor: pointer;
+}
+
+.au-form-group__option input[type="checkbox"],
+.au-form-group__option input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--au-color-blue);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* -----------------------------------------------------------------------
+   Form actions — submit/cancel row
+   ----------------------------------------------------------------------- */
+
+.au-form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--au-space-3);
+  padding-block-start: var(--au-space-6);
+}
+
+.au-form-actions--end {
+  justify-content: flex-end;
+}
+
+.au-form-actions--between {
+  justify-content: space-between;
+}

@@ -1,0 +1,22 @@
+[package]
+name = "adapto_live"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+adapto_runtime = { path = "../adapto_runtime" }
+adapto_compiler = { path = "../adapto_compiler" }
+adapto_client_protocol = { path = "../adapto_client_protocol" }
+adapto_auth = { path = "../adapto_auth" }
+adapto_audit = { path = "../adapto_audit" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+tokio-test = { workspace = true }

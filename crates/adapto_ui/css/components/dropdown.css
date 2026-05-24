@@ -1,0 +1,188 @@
+/* ==========================================================================
+   Adapto UI — Dropdown
+   Menu panel with items, dividers, and nested groups.
+   ========================================================================== */
+
+.au-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.au-dropdown__trigger {
+  cursor: pointer;
+}
+
+/* -----------------------------------------------------------------------
+   Menu panel
+   ----------------------------------------------------------------------- */
+
+.au-dropdown__menu {
+  position: absolute;
+  z-index: var(--au-z-dropdown);
+  min-width: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-block: var(--au-space-1);
+  background-color: var(--au-color-surface-elevated);
+  border: 1px solid var(--au-color-border);
+  border-radius: var(--au-radius-md);
+  box-shadow: var(--au-shadow-lg);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--au-duration-fast) var(--au-ease-default),
+    transform var(--au-duration-fast) var(--au-ease-default),
+    visibility var(--au-duration-fast) var(--au-ease-default);
+}
+
+.au-dropdown__menu--active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* -----------------------------------------------------------------------
+   Alignment
+   ----------------------------------------------------------------------- */
+
+.au-dropdown__menu--start {
+  inset-inline-start: 0;
+  top: calc(100% + var(--au-space-1));
+}
+
+.au-dropdown__menu--end {
+  inset-inline-end: 0;
+  top: calc(100% + var(--au-space-1));
+}
+
+.au-dropdown__menu--top {
+  bottom: calc(100% + var(--au-space-1));
+  top: auto;
+  transform: translateY(4px);
+}
+
+.au-dropdown__menu--top.au-dropdown__menu--active {
+  transform: translateY(0);
+}
+
+/* -----------------------------------------------------------------------
+   Items
+   ----------------------------------------------------------------------- */
+
+.au-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: var(--au-space-3);
+  padding: var(--au-space-2) var(--au-space-3);
+  margin-inline: var(--au-space-1);
+  font-size: var(--au-text-sm);
+  color: var(--au-color-text);
+  border-radius: var(--au-radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--au-duration-fast) var(--au-ease-default);
+  border: none;
+  background: none;
+  width: calc(100% - var(--au-space-2));
+  text-align: start;
+}
+
+.au-dropdown__item:hover {
+  background-color: var(--au-color-bg-secondary);
+}
+
+.au-dropdown__item:focus-visible {
+  outline: 2px solid var(--au-color-focus);
+  outline-offset: -2px;
+}
+
+.au-dropdown__item--active {
+  color: var(--au-color-blue);
+  font-weight: var(--au-weight-medium);
+}
+
+.au-dropdown__item--destructive {
+  color: var(--au-color-red);
+}
+
+.au-dropdown__item--destructive:hover {
+  background-color: var(--au-color-error-tint);
+}
+
+.au-dropdown__item:disabled,
+.au-dropdown__item[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* -----------------------------------------------------------------------
+   Item parts
+   ----------------------------------------------------------------------- */
+
+.au-dropdown__item-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.au-dropdown__item-label {
+  flex: 1;
+}
+
+.au-dropdown__item-shortcut {
+  font-size: var(--au-text-xs);
+  color: var(--au-color-text-tertiary);
+  margin-inline-start: var(--au-space-4);
+}
+
+.au-dropdown__item-check {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--au-color-blue);
+}
+
+/* -----------------------------------------------------------------------
+   Divider
+   ----------------------------------------------------------------------- */
+
+.au-dropdown__divider {
+  height: 1px;
+  background-color: var(--au-color-border);
+  margin-block: var(--au-space-1);
+  margin-inline: var(--au-space-3);
+}
+
+/* -----------------------------------------------------------------------
+   Section header
+   ----------------------------------------------------------------------- */
+
+.au-dropdown__header {
+  padding: var(--au-space-2) var(--au-space-3);
+  margin-inline: var(--au-space-1);
+  font-size: var(--au-text-xs);
+  font-weight: var(--au-weight-semibold);
+  color: var(--au-color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--au-tracking-wide);
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-dropdown__menu,
+  .au-dropdown__item {
+    transition: none;
+  }
+}

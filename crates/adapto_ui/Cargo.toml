@@ -1,0 +1,11 @@
+[package]
+name = "adapto_ui"
+description = "Handwritten CSS component library inspired by Apple Human Interface Guidelines"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[dev-dependencies]

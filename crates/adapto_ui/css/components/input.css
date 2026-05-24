@@ -1,0 +1,247 @@
+/* ==========================================================================
+   Adapto UI — Input, Textarea, Select
+   Form controls with focus rings, error states, and prefix/suffix support.
+   ========================================================================== */
+
+/* -----------------------------------------------------------------------
+   Base input
+   ----------------------------------------------------------------------- */
+
+.au-input {
+  display: block;
+  width: 100%;
+  padding-block: var(--au-space-2);
+  padding-inline: var(--au-space-3);
+  font-family: var(--au-font-family);
+  font-size: var(--au-text-base);
+  line-height: var(--au-leading-normal);
+  color: var(--au-color-text);
+  background-color: var(--au-color-surface);
+  border: 1px solid var(--au-color-border);
+  border-radius: var(--au-radius-md);
+  outline: none;
+  min-height: 40px;
+  transition:
+    border-color var(--au-duration-fast) var(--au-ease-default),
+    box-shadow var(--au-duration-fast) var(--au-ease-default),
+    background-color var(--au-duration-fast) var(--au-ease-default);
+}
+
+.au-input::placeholder {
+  color: var(--au-color-text-tertiary);
+}
+
+.au-input:hover {
+  border-color: var(--au-color-border-strong);
+}
+
+.au-input:focus,
+.au-input:focus-visible {
+  border-color: var(--au-color-blue);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+  outline: none;
+}
+
+/* -----------------------------------------------------------------------
+   Error state
+   ----------------------------------------------------------------------- */
+
+.au-input--error {
+  border-color: var(--au-color-red);
+}
+
+.au-input--error:focus,
+.au-input--error:focus-visible {
+  border-color: var(--au-color-red);
+  box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.2);
+}
+
+/* -----------------------------------------------------------------------
+   Disabled state
+   ----------------------------------------------------------------------- */
+
+.au-input:disabled,
+.au-input[aria-disabled="true"] {
+  opacity: 0.5;
+  background-color: var(--au-color-bg-secondary);
+  cursor: not-allowed;
+}
+
+/* -----------------------------------------------------------------------
+   Sizes
+   ----------------------------------------------------------------------- */
+
+.au-input--sm {
+  padding-block: var(--au-space-1);
+  padding-inline: var(--au-space-2);
+  font-size: var(--au-text-sm);
+  min-height: 32px;
+  border-radius: var(--au-radius-sm);
+}
+
+.au-input--lg {
+  padding-block: var(--au-space-3);
+  padding-inline: var(--au-space-4);
+  font-size: var(--au-text-lg);
+  min-height: 48px;
+  border-radius: var(--au-radius-lg);
+}
+
+/* -----------------------------------------------------------------------
+   Input with prefix/suffix icons
+   ----------------------------------------------------------------------- */
+
+.au-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.au-input-wrapper .au-input {
+  width: 100%;
+}
+
+.au-input-prefix,
+.au-input-suffix {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--au-color-text-tertiary);
+  pointer-events: none;
+  width: 40px;
+  height: 100%;
+}
+
+.au-input-prefix {
+  inset-inline-start: 0;
+}
+
+.au-input-suffix {
+  inset-inline-end: 0;
+}
+
+.au-input-wrapper--prefix .au-input {
+  padding-inline-start: 40px;
+}
+
+.au-input-wrapper--suffix .au-input {
+  padding-inline-end: 40px;
+}
+
+/* -----------------------------------------------------------------------
+   Textarea
+   ----------------------------------------------------------------------- */
+
+.au-textarea {
+  display: block;
+  width: 100%;
+  padding: var(--au-space-3);
+  font-family: var(--au-font-family);
+  font-size: var(--au-text-base);
+  line-height: var(--au-leading-normal);
+  color: var(--au-color-text);
+  background-color: var(--au-color-surface);
+  border: 1px solid var(--au-color-border);
+  border-radius: var(--au-radius-md);
+  outline: none;
+  resize: vertical;
+  min-height: 80px;
+  transition:
+    border-color var(--au-duration-fast) var(--au-ease-default),
+    box-shadow var(--au-duration-fast) var(--au-ease-default);
+}
+
+.au-textarea::placeholder {
+  color: var(--au-color-text-tertiary);
+}
+
+.au-textarea:hover {
+  border-color: var(--au-color-border-strong);
+}
+
+.au-textarea:focus,
+.au-textarea:focus-visible {
+  border-color: var(--au-color-blue);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+  outline: none;
+}
+
+.au-textarea--error {
+  border-color: var(--au-color-red);
+}
+
+.au-textarea--error:focus,
+.au-textarea--error:focus-visible {
+  border-color: var(--au-color-red);
+  box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.2);
+}
+
+.au-textarea:disabled {
+  opacity: 0.5;
+  background-color: var(--au-color-bg-secondary);
+  cursor: not-allowed;
+}
+
+/* -----------------------------------------------------------------------
+   Select
+   ----------------------------------------------------------------------- */
+
+.au-select {
+  display: block;
+  width: 100%;
+  padding-block: var(--au-space-2);
+  padding-inline-start: var(--au-space-3);
+  padding-inline-end: var(--au-space-8);
+  font-family: var(--au-font-family);
+  font-size: var(--au-text-base);
+  line-height: var(--au-leading-normal);
+  color: var(--au-color-text);
+  background-color: var(--au-color-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23636366' d='M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--au-space-3) center;
+  background-size: 12px;
+  border: 1px solid var(--au-color-border);
+  border-radius: var(--au-radius-md);
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+  min-height: 40px;
+  transition:
+    border-color var(--au-duration-fast) var(--au-ease-default),
+    box-shadow var(--au-duration-fast) var(--au-ease-default);
+}
+
+.au-select:hover {
+  border-color: var(--au-color-border-strong);
+}
+
+.au-select:focus,
+.au-select:focus-visible {
+  border-color: var(--au-color-blue);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+  outline: none;
+}
+
+.au-select:disabled {
+  opacity: 0.5;
+  background-color: var(--au-color-bg-secondary);
+  cursor: not-allowed;
+}
+
+.au-select--error {
+  border-color: var(--au-color-red);
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-input,
+  .au-textarea,
+  .au-select {
+    transition: none;
+  }
+}

@@ -1,0 +1,168 @@
+/* ==========================================================================
+   Adapto UI — Modal
+   Overlay dialog with backdrop blur, scale+fade animation.
+   ========================================================================== */
+
+/* -----------------------------------------------------------------------
+   Overlay
+   ----------------------------------------------------------------------- */
+
+.au-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--au-z-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--au-space-4);
+  background-color: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--au-duration-normal) var(--au-ease-default),
+    visibility var(--au-duration-normal) var(--au-ease-default);
+}
+
+.au-modal-overlay--active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* -----------------------------------------------------------------------
+   Modal container
+   ----------------------------------------------------------------------- */
+
+.au-modal {
+  position: relative;
+  z-index: var(--au-z-modal);
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100dvh - var(--au-space-8));
+  display: flex;
+  flex-direction: column;
+  background-color: var(--au-color-surface-elevated);
+  border-radius: var(--au-radius-xl);
+  box-shadow: var(--au-shadow-xl);
+  overflow: hidden;
+  transform: scale(0.95) translateY(8px);
+  opacity: 0;
+  transition:
+    transform var(--au-duration-normal) var(--au-ease-spring),
+    opacity var(--au-duration-normal) var(--au-ease-default);
+}
+
+.au-modal-overlay--active .au-modal {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+/* -----------------------------------------------------------------------
+   Sizes
+   ----------------------------------------------------------------------- */
+
+.au-modal--sm {
+  max-width: 380px;
+}
+
+.au-modal--lg {
+  max-width: 680px;
+}
+
+.au-modal--full {
+  max-width: calc(100vw - var(--au-space-8));
+  max-height: calc(100dvh - var(--au-space-8));
+}
+
+/* -----------------------------------------------------------------------
+   Sections
+   ----------------------------------------------------------------------- */
+
+.au-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--au-space-5) var(--au-space-6);
+  border-bottom: 1px solid var(--au-color-border);
+  flex-shrink: 0;
+}
+
+.au-modal__title {
+  font-size: var(--au-text-lg);
+  font-weight: var(--au-weight-semibold);
+  line-height: var(--au-leading-tight);
+}
+
+.au-modal__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--au-radius-full);
+  cursor: pointer;
+  color: var(--au-color-text-tertiary);
+  background: none;
+  border: none;
+  padding: 0;
+  transition:
+    background-color var(--au-duration-fast) var(--au-ease-default),
+    color var(--au-duration-fast) var(--au-ease-default);
+}
+
+.au-modal__close:hover {
+  background-color: var(--au-gray-100);
+  color: var(--au-color-text);
+}
+
+.au-modal__close:focus-visible {
+  outline: 2px solid var(--au-color-focus);
+  outline-offset: 2px;
+}
+
+.au-modal__body {
+  padding: var(--au-space-6);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.au-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--au-space-3);
+  padding: var(--au-space-4) var(--au-space-6);
+  border-top: 1px solid var(--au-color-border);
+  background-color: var(--au-color-bg-secondary);
+  flex-shrink: 0;
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-modal-overlay,
+  .au-modal {
+    transition: none;
+  }
+
+  .au-modal {
+    transform: none;
+  }
+
+  .au-modal__close {
+    transition: none;
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Print — hide modals
+   ----------------------------------------------------------------------- */
+
+@media print {
+  .au-modal-overlay {
+    display: none;
+  }
+}

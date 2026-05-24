@@ -1,0 +1,20 @@
+[package]
+name = "adapto_test_utils"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+adapto_runtime = { path = "../adapto_runtime" }
+adapto_client_protocol = { path = "../adapto_client_protocol" }
+adapto_auth = { path = "../adapto_auth" }
+adapto_audit = { path = "../adapto_audit" }
+adapto_forms = { path = "../adapto_forms" }
+adapto_db = { path = "../adapto_db" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

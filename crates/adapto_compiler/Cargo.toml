@@ -1,0 +1,15 @@
+[package]
+name = "adapto_compiler"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+adapto_parser = { path = "../adapto_parser" }
+adapto_runtime = { path = "../adapto_runtime" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

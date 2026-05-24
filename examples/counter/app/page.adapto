@@ -1,0 +1,54 @@
+<route>
+  path: "/counter"
+  layout: "main"
+  auth: public
+</route>
+
+<script lang="rust">
+  state count: i32 = 0
+
+  action increment() {
+    count += 1
+  }
+
+  action decrement() {
+    count -= 1
+  }
+
+  action reset() {
+    count = 0
+  }
+</script>
+
+<template>
+  <div class="counter">
+    <h1>Counter Demo</h1>
+    <p class="count">Count: {count}</p>
+    <div class="buttons">
+      <button on:click="decrement">-</button>
+      <button on:click="reset">Reset</button>
+      <button on:click="increment">+</button>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+  .counter {
+    max-width: 400px;
+    margin: 2rem auto;
+    text-align: center;
+  }
+  .count {
+    font-size: 2rem;
+    font-weight: bold;
+  }
+  .buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+  }
+  button {
+    padding: 0.5rem 1.5rem;
+    font-size: 1.2rem;
+  }
+</style>

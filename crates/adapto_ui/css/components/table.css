@@ -1,0 +1,185 @@
+/* ==========================================================================
+   Adapto UI — Table
+   Clean, scannable data tables with row separators.
+   ========================================================================== */
+
+.au-table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--au-radius-md);
+  border: 1px solid var(--au-color-border);
+}
+
+.au-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--au-text-sm);
+  line-height: var(--au-leading-normal);
+}
+
+/* -----------------------------------------------------------------------
+   Header
+   ----------------------------------------------------------------------- */
+
+.au-table thead {
+  background-color: var(--au-color-bg-secondary);
+}
+
+.au-table th {
+  padding: var(--au-space-3) var(--au-space-4);
+  font-weight: var(--au-weight-medium);
+  font-size: var(--au-text-xs);
+  color: var(--au-color-text-secondary);
+  text-align: start;
+  white-space: nowrap;
+  letter-spacing: var(--au-tracking-wide);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--au-color-border);
+  user-select: none;
+}
+
+/* -----------------------------------------------------------------------
+   Sortable headers
+   ----------------------------------------------------------------------- */
+
+.au-table th[data-sort] {
+  cursor: pointer;
+  position: relative;
+  padding-inline-end: var(--au-space-6);
+}
+
+.au-table th[data-sort]::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: var(--au-space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-inline: 4px solid transparent;
+  border-block-start: 5px solid var(--au-color-text-tertiary);
+  opacity: 0.4;
+}
+
+.au-table th[data-sort="asc"]::after {
+  border-block-start: none;
+  border-block-end: 5px solid var(--au-color-blue);
+  opacity: 1;
+}
+
+.au-table th[data-sort="desc"]::after {
+  border-block-start: 5px solid var(--au-color-blue);
+  opacity: 1;
+}
+
+/* -----------------------------------------------------------------------
+   Body
+   ----------------------------------------------------------------------- */
+
+.au-table td {
+  padding: var(--au-space-3) var(--au-space-4);
+  border-bottom: 1px solid var(--au-color-border);
+  vertical-align: middle;
+}
+
+.au-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* -----------------------------------------------------------------------
+   Striped variant
+   ----------------------------------------------------------------------- */
+
+.au-table--striped tbody tr:nth-child(even) {
+  background-color: var(--au-color-bg-secondary);
+}
+
+/* -----------------------------------------------------------------------
+   Hoverable variant
+   ----------------------------------------------------------------------- */
+
+.au-table--hoverable tbody tr {
+  transition: background-color var(--au-duration-fast) var(--au-ease-default);
+}
+
+.au-table--hoverable tbody tr:hover {
+  background-color: var(--au-color-bg-tertiary);
+}
+
+/* -----------------------------------------------------------------------
+   Sticky header
+   ----------------------------------------------------------------------- */
+
+.au-table--sticky thead th {
+  position: sticky;
+  top: 0;
+  z-index: var(--au-z-sticky);
+  background-color: var(--au-color-bg-secondary);
+}
+
+/* -----------------------------------------------------------------------
+   Compact variant
+   ----------------------------------------------------------------------- */
+
+.au-table--compact th,
+.au-table--compact td {
+  padding: var(--au-space-2) var(--au-space-3);
+}
+
+/* -----------------------------------------------------------------------
+   Alignment helpers
+   ----------------------------------------------------------------------- */
+
+.au-table .au-text-end {
+  text-align: end;
+}
+
+.au-table .au-text-center {
+  text-align: center;
+}
+
+/* -----------------------------------------------------------------------
+   Selected row
+   ----------------------------------------------------------------------- */
+
+.au-table tbody tr.au-table__row--selected {
+  background-color: var(--au-color-info-tint);
+}
+
+/* -----------------------------------------------------------------------
+   Empty state
+   ----------------------------------------------------------------------- */
+
+.au-table__empty {
+  padding: var(--au-space-12) var(--au-space-4);
+  text-align: center;
+  color: var(--au-color-text-tertiary);
+  font-size: var(--au-text-sm);
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-table--hoverable tbody tr {
+    transition: none;
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Print
+   ----------------------------------------------------------------------- */
+
+@media print {
+  .au-table-container {
+    overflow: visible;
+    border: none;
+  }
+
+  .au-table th,
+  .au-table td {
+    border: 1px solid #ccc;
+  }
+}

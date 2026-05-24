@@ -1,0 +1,138 @@
+/* ==========================================================================
+   Adapto UI — Card
+   Content containers with elevation, flat, and grouped variants.
+   ========================================================================== */
+
+.au-card {
+  background-color: var(--au-color-surface);
+  border-radius: var(--au-radius-lg);
+  overflow: hidden;
+  transition:
+    box-shadow var(--au-duration-normal) var(--au-ease-default),
+    transform var(--au-duration-normal) var(--au-ease-default);
+}
+
+/* -----------------------------------------------------------------------
+   Variants
+   ----------------------------------------------------------------------- */
+
+.au-card--elevated {
+  box-shadow: var(--au-shadow-md);
+}
+
+.au-card--flat {
+  border: 1px solid var(--au-color-border);
+  box-shadow: none;
+}
+
+.au-card--grouped {
+  border-radius: 0;
+  border-bottom: 1px solid var(--au-color-border);
+}
+
+.au-card--grouped:first-child {
+  border-start-start-radius: var(--au-radius-lg);
+  border-start-end-radius: var(--au-radius-lg);
+}
+
+.au-card--grouped:last-child {
+  border-end-start-radius: var(--au-radius-lg);
+  border-end-end-radius: var(--au-radius-lg);
+  border-bottom: none;
+}
+
+/* -----------------------------------------------------------------------
+   Hover lift — opt-in interactive effect
+   ----------------------------------------------------------------------- */
+
+.au-card--hoverable {
+  cursor: pointer;
+}
+
+.au-card--hoverable:hover {
+  box-shadow: var(--au-shadow-lg);
+  transform: translateY(-2px);
+}
+
+.au-card--hoverable:active {
+  transform: translateY(0);
+  box-shadow: var(--au-shadow-sm);
+}
+
+/* -----------------------------------------------------------------------
+   Sections
+   ----------------------------------------------------------------------- */
+
+.au-card__header {
+  padding: var(--au-space-4) var(--au-space-5);
+  border-bottom: 1px solid var(--au-color-border);
+  font-weight: var(--au-weight-semibold);
+  font-size: var(--au-text-lg);
+}
+
+.au-card__body {
+  padding: var(--au-space-5);
+}
+
+.au-card__footer {
+  padding: var(--au-space-4) var(--au-space-5);
+  border-top: 1px solid var(--au-color-border);
+  background-color: var(--au-color-bg-secondary);
+}
+
+/* -----------------------------------------------------------------------
+   Card with image
+   ----------------------------------------------------------------------- */
+
+.au-card__image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.au-card__image + .au-card__body {
+  padding-block-start: var(--au-space-4);
+}
+
+/* -----------------------------------------------------------------------
+   Compact variant
+   ----------------------------------------------------------------------- */
+
+.au-card--compact .au-card__header {
+  padding: var(--au-space-3) var(--au-space-4);
+}
+
+.au-card--compact .au-card__body {
+  padding: var(--au-space-4);
+}
+
+.au-card--compact .au-card__footer {
+  padding: var(--au-space-3) var(--au-space-4);
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-card,
+  .au-card--hoverable {
+    transition: none;
+  }
+
+  .au-card--hoverable:hover {
+    transform: none;
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Print
+   ----------------------------------------------------------------------- */
+
+@media print {
+  .au-card {
+    box-shadow: none;
+    border: 1px solid #ccc;
+    break-inside: avoid;
+  }
+}

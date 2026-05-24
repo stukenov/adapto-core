@@ -1,0 +1,168 @@
+/* ==========================================================================
+   Adapto UI — Avatar
+   Profile images with initials fallback and online/offline status dot.
+   ========================================================================== */
+
+.au-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--au-radius-full);
+  background-color: var(--au-gray-200);
+  color: var(--au-color-text-secondary);
+  font-family: var(--au-font-family);
+  font-weight: var(--au-weight-medium);
+  font-size: var(--au-text-sm);
+  overflow: hidden;
+  user-select: none;
+}
+
+.au-avatar__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.au-avatar__initials {
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: var(--au-tracking-wide);
+}
+
+/* -----------------------------------------------------------------------
+   Sizes
+   ----------------------------------------------------------------------- */
+
+.au-avatar--xs {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+
+.au-avatar--sm {
+  width: 32px;
+  height: 32px;
+  font-size: var(--au-text-xs);
+}
+
+/* default = 40px, defined on .au-avatar */
+
+.au-avatar--lg {
+  width: 56px;
+  height: 56px;
+  font-size: var(--au-text-lg);
+}
+
+.au-avatar--xl {
+  width: 80px;
+  height: 80px;
+  font-size: var(--au-text-2xl);
+}
+
+/* -----------------------------------------------------------------------
+   Status dot
+   ----------------------------------------------------------------------- */
+
+.au-avatar__status {
+  position: absolute;
+  bottom: 0;
+  inset-inline-end: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--au-radius-full);
+  border: 2px solid var(--au-color-surface);
+  background-color: var(--au-gray-400);
+}
+
+.au-avatar__status--online {
+  background-color: var(--au-color-green);
+}
+
+.au-avatar__status--busy {
+  background-color: var(--au-color-red);
+}
+
+.au-avatar__status--away {
+  background-color: var(--au-color-orange);
+}
+
+/* Scale status dot with avatar size */
+.au-avatar--xs .au-avatar__status {
+  width: 8px;
+  height: 8px;
+  border-width: 1px;
+}
+
+.au-avatar--sm .au-avatar__status {
+  width: 10px;
+  height: 10px;
+  border-width: 2px;
+}
+
+.au-avatar--lg .au-avatar__status {
+  width: 14px;
+  height: 14px;
+}
+
+.au-avatar--xl .au-avatar__status {
+  width: 18px;
+  height: 18px;
+  border-width: 3px;
+}
+
+/* -----------------------------------------------------------------------
+   Avatar group — overlapping stack
+   ----------------------------------------------------------------------- */
+
+.au-avatar-group {
+  display: inline-flex;
+  flex-direction: row-reverse;
+}
+
+.au-avatar-group .au-avatar {
+  border: 2px solid var(--au-color-surface);
+  margin-inline-start: -8px;
+}
+
+.au-avatar-group .au-avatar:last-child {
+  margin-inline-start: 0;
+}
+
+/* -----------------------------------------------------------------------
+   Color variants for initials background
+   ----------------------------------------------------------------------- */
+
+.au-avatar--blue {
+  background-color: var(--au-color-info-tint);
+  color: var(--au-color-blue);
+}
+
+.au-avatar--green {
+  background-color: var(--au-color-success-tint);
+  color: var(--au-color-green);
+}
+
+.au-avatar--orange {
+  background-color: var(--au-color-warning-tint);
+  color: var(--au-color-orange);
+}
+
+.au-avatar--red {
+  background-color: var(--au-color-error-tint);
+  color: var(--au-color-red);
+}
+
+.au-avatar--purple {
+  background-color: rgba(175, 82, 222, 0.15);
+  color: var(--au-color-purple);
+}
+
+.au-avatar--pink {
+  background-color: rgba(255, 45, 85, 0.15);
+  color: var(--au-color-pink);
+}

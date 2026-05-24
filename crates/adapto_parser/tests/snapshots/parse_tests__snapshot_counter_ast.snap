@@ -1,0 +1,56 @@
+---
+source: crates/adapto_parser/tests/parse_tests.rs
+assertion_line: 1324
+expression: file
+---
+route:
+  path: /counter
+  method: ~
+  layout: ~
+  page_title: ~
+  auth: Public
+  role: ~
+  permission: ~
+  tenant: ~
+  cache: ~
+  error: ~
+  not_found: ~
+script:
+  uses: []
+  props: []
+  states:
+    - name: count
+      ty: i32
+      default: "0"
+      secret: false
+  memos: []
+  loaders: []
+  actions:
+    - name: increment
+      is_async: false
+      params: []
+      permission: ~
+      audit: ~
+      body: count += 1
+  server_fns: []
+  forms: []
+  ai_actions: []
+template:
+  children:
+    - Element:
+        tag: button
+        attributes: []
+        events:
+          - event: click
+            handler: increment
+            modifiers: []
+        bindings: []
+        children:
+          - Text: "Count:"
+          - Expression:
+              expr: count
+              id: ~
+        self_closing: false
+style: ~
+resource: ~
+layout: ~

@@ -1,0 +1,194 @@
+/* ==========================================================================
+   Adapto UI — Progress & Spinner
+   Determinate progress bar and indeterminate spinner.
+   ========================================================================== */
+
+/* =======================================================================
+   Progress bar
+   ======================================================================= */
+
+.au-progress {
+  width: 100%;
+  height: 6px;
+  background-color: var(--au-gray-100);
+  border-radius: var(--au-radius-full);
+  overflow: hidden;
+  position: relative;
+}
+
+.au-progress__bar {
+  height: 100%;
+  background-color: var(--au-color-blue);
+  border-radius: var(--au-radius-full);
+  transition: width var(--au-duration-normal) var(--au-ease-default);
+  min-width: 0;
+}
+
+/* -----------------------------------------------------------------------
+   Color variants
+   ----------------------------------------------------------------------- */
+
+.au-progress--success .au-progress__bar {
+  background-color: var(--au-color-green);
+}
+
+.au-progress--warning .au-progress__bar {
+  background-color: var(--au-color-orange);
+}
+
+.au-progress--error .au-progress__bar {
+  background-color: var(--au-color-red);
+}
+
+/* -----------------------------------------------------------------------
+   Sizes
+   ----------------------------------------------------------------------- */
+
+.au-progress--sm {
+  height: 4px;
+}
+
+.au-progress--lg {
+  height: 10px;
+}
+
+/* -----------------------------------------------------------------------
+   Indeterminate progress bar
+   ----------------------------------------------------------------------- */
+
+.au-progress--indeterminate .au-progress__bar {
+  width: 30%;
+  animation: au-progress-indeterminate 1.5s var(--au-ease-in-out) infinite;
+}
+
+@keyframes au-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+/* -----------------------------------------------------------------------
+   With label
+   ----------------------------------------------------------------------- */
+
+.au-progress-labeled {
+  display: flex;
+  flex-direction: column;
+  gap: var(--au-space-2);
+}
+
+.au-progress-labeled__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.au-progress-labeled__label {
+  font-size: var(--au-text-sm);
+  font-weight: var(--au-weight-medium);
+  color: var(--au-color-text);
+}
+
+.au-progress-labeled__value {
+  font-size: var(--au-text-sm);
+  font-weight: var(--au-weight-medium);
+  color: var(--au-color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =======================================================================
+   Spinner
+   ======================================================================= */
+
+.au-spinner {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 2.5px solid var(--au-gray-200);
+  border-top-color: var(--au-color-blue);
+  border-radius: var(--au-radius-full);
+  animation: au-spin 0.7s linear infinite;
+}
+
+@keyframes au-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* -----------------------------------------------------------------------
+   Spinner sizes
+   ----------------------------------------------------------------------- */
+
+.au-spinner--sm {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+.au-spinner--lg {
+  width: 36px;
+  height: 36px;
+  border-width: 3px;
+}
+
+.au-spinner--xl {
+  width: 48px;
+  height: 48px;
+  border-width: 3.5px;
+}
+
+/* -----------------------------------------------------------------------
+   Spinner colors
+   ----------------------------------------------------------------------- */
+
+.au-spinner--white {
+  border-color: rgba(255, 255, 255, 0.3);
+  border-top-color: #FFFFFF;
+}
+
+.au-spinner--dark {
+  border-color: rgba(0, 0, 0, 0.1);
+  border-top-color: var(--au-gray-900);
+}
+
+/* -----------------------------------------------------------------------
+   Centered spinner with label
+   ----------------------------------------------------------------------- */
+
+.au-spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--au-space-3);
+  padding: var(--au-space-8);
+}
+
+.au-spinner-container__label {
+  font-size: var(--au-text-sm);
+  color: var(--au-color-text-secondary);
+}
+
+/* -----------------------------------------------------------------------
+   Reduced motion — slow spin, no indeterminate animation
+   ----------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .au-spinner {
+    animation-duration: 1.5s;
+  }
+
+  .au-progress__bar {
+    transition: none;
+  }
+
+  .au-progress--indeterminate .au-progress__bar {
+    animation: none;
+    width: 100%;
+    opacity: 0.3;
+  }
+}
