@@ -2,6 +2,7 @@
 name = "adapto_ssr"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 adapto_parser = { path = "../adapto_parser" }

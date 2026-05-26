@@ -2,6 +2,7 @@
 name = "adapto_client_protocol"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 serde = { workspace = true }

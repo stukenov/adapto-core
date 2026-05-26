@@ -1,0 +1,20 @@
+[package]
+name = "adapto"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+adapto_store = { path = "../adapto_store" }
+adapto_ui = { path = "../adapto_ui" }
+adapto_forms = { path = "../adapto_forms" }
+adapto_client_protocol = { path = "../adapto_client_protocol" }
+adapto_ssr = { path = "../adapto_ssr" }
+adapto_live = { path = "../adapto_live" }
+adapto_runtime = { path = "../adapto_runtime" }
+adapto_auth = { path = "../adapto_auth" }
+adapto_audit = { path = "../adapto_audit" }
+adapto_macros = { path = "../adapto_macros" }
+adapto_app = { path = "../adapto_app" }
+serde = { workspace = true }
+serde_json = { workspace = true }

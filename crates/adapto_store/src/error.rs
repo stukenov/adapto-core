@@ -32,4 +32,7 @@ pub enum StoreError {
 
     #[error("Tenant mismatch: expected `{expected}`, got `{actual}`")]
     TenantMismatch { expected: String, actual: String },
+
+    #[error("Disk collection error: {0}")]
+    DiskError(String),
 }

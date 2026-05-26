@@ -15,11 +15,13 @@
 
 pub mod collection;
 pub mod cursor;
+pub mod disk_collection;
 pub mod document;
 pub mod engine;
 pub mod error;
 pub mod index;
 pub mod query;
+pub mod slug;
 pub mod tenant;
 pub mod wal;
 
@@ -30,6 +32,7 @@ pub use engine::StoreStats;
 pub use error::StoreError;
 pub use index::{IndexInfo, IndexKey};
 pub use query::{Filter, Query, SortDir, Update, UpdateResult};
+pub use slug::{slugify, is_valid_slug};
 pub use tenant::{TenantCollection, TenantScope};
 
 use engine::StorageEngine;
@@ -42,6 +45,7 @@ use serde_json::Value;
 /// The main entry point. Open a store, get collections, query documents.
 ///
 /// Thread-safe: cloneable handles share the same underlying engine.
+#[derive(Clone)]
 pub struct AdaptoStore {
     engine: StorageEngine,
 }
@@ -88,6 +92,16 @@ impl AdaptoStore {
     /// Aggregate statistics about the store.
     pub fn stats(&self) -> StoreStats {
         self.engine.stats()
+    }
+
+    /// Open or create a disk-backed collection.
+    /// Requires that the store was opened with a path.
+    pub fn disk_collection(&self, name: &str) -> Result<DiskCollection<'_>, StoreError> {
+        self.engine.open_disk_collection(name)?;
+        Ok(DiskCollection {
+            engine: &self.engine,
+            name: name.to_string(),
+        })
     }
 }
 
@@ -200,5 +214,58 @@ impl<'a> Collection<'a> {
     /// Total number of documents (unfiltered).
     pub fn count_all(&self) -> u64 {
         self.engine.count_all(&self.name)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// DiskCollection — disk-backed collection with mmap reads
+// ---------------------------------------------------------------------------
+
+/// A handle to a disk-backed collection. Data lives on disk; only indexes
+/// are kept in memory. Ideal for large datasets (100K+ documents).
+pub struct DiskCollection<'a> {
+    engine: &'a StorageEngine,
+    name: String,
+}
+
+impl<'a> DiskCollection<'a> {
+    /// Bulk-insert documents. Overwrites any existing data.
+    pub fn bulk_insert(&self, docs: Vec<Value>) -> Result<u64, StoreError> {
+        self.engine.disk_bulk_insert(&self.name, docs)
+    }
+
+    /// Execute a query and return a cursor over results.
+    pub fn find(&self, query: Query) -> Cursor {
+        self.engine.disk_find(&self.name, &query)
+    }
+
+    /// Find a single document matching the query.
+    pub fn find_one(&self, query: Query) -> Result<Option<Document>, StoreError> {
+        self.engine.disk_find_one(&self.name, &query)
+    }
+
+    /// Total number of documents.
+    pub fn count_all(&self) -> u64 {
+        self.engine.disk_count_all(&self.name)
+    }
+
+    /// Create a single-field index.
+    pub fn create_index(&self, field: &str, unique: bool) -> Result<(), StoreError> {
+        self.engine.disk_create_index(&self.name, field, unique)
+    }
+
+    /// List metadata for all indexes.
+    pub fn indexes(&self) -> Vec<IndexInfo> {
+        self.engine.disk_indexes(&self.name)
+    }
+
+    /// Get all keys from a named index (without loading full documents).
+    pub fn index_keys(&self, field: &str) -> Vec<String> {
+        self.engine.disk_index_keys(&self.name, field)
+    }
+
+    /// The collection name.
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }

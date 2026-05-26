@@ -2,6 +2,7 @@
 name = "adapto_compiler"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 adapto_parser = { path = "../adapto_parser" }

@@ -2,6 +2,11 @@
 name = "adapto_store"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Embedded document database for Rust — JSON documents, BTree indexes, WAL"
 
 [dependencies]
 serde = { workspace = true }
@@ -9,7 +14,12 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
+memmap2 = "0.9"
+rmp-serde = "1"
 
 [[bench]]
 name = "benchmark"
 harness = false
+
+[dev-dependencies]
+tempfile = "3.27.0"

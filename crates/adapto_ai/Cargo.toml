@@ -2,6 +2,7 @@
 name = "adapto_ai"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [dependencies]
 adapto_runtime = { path = "../adapto_runtime" }

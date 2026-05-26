@@ -1,565 +1,198 @@
-use adapto_audit::event::{AuditEvent, AuditStatus};
-use adapto_audit::sink::{AuditSink, InMemoryAuditSink};
-use adapto_auth::rbac::{RbacStore, Role};
-use adapto_compiler::compiler::Compiler;
-use adapto_db::repository::InMemoryRepository;
-use adapto_forms::schema::{FieldSchema, FieldType, FormSchema};
-use adapto_runtime::context::{Ctx, PermissionSet};
-use adapto_runtime::state::StateStore;
-use adapto_runtime::types::*;
+use adapto_macros::Resource;
+use adapto_store::{AdaptoStore, Query, Update};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashSet;
-use uuid::Uuid;
 
-// ---------------------------------------------------------------------------
-// Customer model (shared across tests)
-// ---------------------------------------------------------------------------
+#[derive(Resource, Serialize, Deserialize, Debug, Clone)]
+#[resource(collection = "customers")]
+pub struct Customer {
+    #[field(required, max_length = 120)]
+    pub name: String,
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Customer {
-    id: Uuid,
-    name: String,
-    email: String,
-    phone: Option<String>,
-    status: String,
+    #[field(required, unique, format = "email")]
+    pub email: String,
+
+    #[field(required)]
+    pub company: String,
+
+    #[field(default = "active", one_of = ["active", "lead", "inactive"])]
+    pub status: String,
+
+    pub created_at: String,
 }
 
-// ---------------------------------------------------------------------------
-// Shared DSL
-// ---------------------------------------------------------------------------
-
-const CUSTOMER_PAGE_DSL: &str = r#"
-<route>
-  path: "/customers"
-  layout: "dashboard"
-  auth: required
-  tenant: required
-  permission: "customers.read"
-</route>
-
-<script lang="rust">
-  state query: String = ""
-  state customers: Vec<Customer> = []
-
-  action async fn search(ctx: Ctx) {
-    ctx.require("customers.read")?;
-    customers = CustomerRepo::search(ctx.tenant_id, query.clone()).await?;
-  }
-
-  #[permission("customers.delete")]
-  #[audit("customer.deleted")]
-  action async fn delete(id: Uuid, ctx: Ctx) {
-    CustomerRepo::delete(ctx.tenant_id, id).await?;
-  }
-</script>
-
-<template>
-  <div class="customer-list">
-    <h1>Customers</h1>
-    <input bind:value="query" on:input="search" />
-    {#each customers as customer}
-      <div class="customer-row">
-        <span>{customer.name}</span>
-        <span>{customer.email}</span>
-        {#can "customers.delete"}
-          <button on:click="delete(customer.id)">Delete</button>
-        {/can}
-      </div>
-    {/each}
-  </div>
-</template>
-
-<style scoped>
-  .customer-list { max-width: 960px; margin: 0 auto; }
-  .customer-row { display: flex; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid #e5e5e5; }
-</style>
-"#;
-
-const RESOURCE_DSL: &str = r#"
-<resource name="Customer" table="customers">
-  tenant: required
-  primary_key: id
-
-  field id: Uuid required readonly
-  field name: String required min=2 max=120 searchable
-  field email: String required unique searchable
-  field phone: Option<String>
-  field status: Enum[active, inactive, blocked] required default=active
-  field created_at: DateTime readonly
-  field updated_at: DateTime readonly
-
-  permission read: "customers.read"
-  permission create: "customers.create"
-  permission update: "customers.update"
-  permission delete: "customers.delete"
-</resource>
-"#;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-fn setup_rbac() -> (RbacStore, UserId, UserId) {
-    let mut rbac = RbacStore::new();
-
-    let mut admin_perms = HashSet::new();
-    admin_perms.insert("customers.read".into());
-    admin_perms.insert("customers.create".into());
-    admin_perms.insert("customers.update".into());
-    admin_perms.insert("customers.delete".into());
-    rbac.add_role(Role {
-        name: "admin".into(),
-        permissions: admin_perms,
-    });
-
-    let mut viewer_perms = HashSet::new();
-    viewer_perms.insert("customers.read".into());
-    rbac.add_role(Role {
-        name: "viewer".into(),
-        permissions: viewer_perms,
-    });
-
-    let admin = UserId(Uuid::new_v4());
-    let viewer = UserId(Uuid::new_v4());
-    rbac.assign_role(&admin, "admin");
-    rbac.assign_role(&viewer, "viewer");
-
-    (rbac, admin, viewer)
+fn test_store() -> AdaptoStore {
+    AdaptoStore::open(None).unwrap()
 }
 
-fn make_ctx(
-    user_id: &UserId,
-    tenant_id: &TenantId,
-    permissions: PermissionSet,
-) -> Ctx {
-    Ctx {
-        user_id: Some(user_id.clone()),
-        tenant_id: Some(tenant_id.clone()),
-        request_id: RequestId::default(),
-        permissions,
-        route: RouteId("/customers".into()),
-        session_id: SessionId("test-session".into()),
+fn sample_customer(name: &str, email: &str) -> Customer {
+    Customer {
+        name: name.into(),
+        email: email.into(),
+        company: "TestCorp".into(),
+        status: "active".into(),
+        created_at: "2026-01-01".into(),
     }
 }
 
-fn customer_form() -> FormSchema {
-    FormSchema::new("CustomerForm")
-        .field(
-            FieldSchema::new("name", FieldType::String)
-                .required()
-                .min_length(2)
-                .max_length(120),
-        )
-        .field(FieldSchema::new("email", FieldType::Email).required())
-        .field(
-            FieldSchema::new("phone", FieldType::Optional(Box::new(FieldType::String)))
-                .max_length(32),
-        )
-        .field(
-            FieldSchema::new(
-                "status",
-                FieldType::Enum(vec![
-                    "active".into(),
-                    "inactive".into(),
-                    "blocked".into(),
-                ]),
-            )
-            .required(),
-        )
+#[test]
+fn collection_name() {
+    assert_eq!(Customer::collection_name(), "customers");
 }
-
-fn seed_repo() -> (InMemoryRepository<Customer>, TenantId, TenantId, Uuid, Uuid, Uuid) {
-    let repo: InMemoryRepository<Customer> = InMemoryRepository::new();
-    let tenant_a = TenantId(Uuid::new_v4());
-    let tenant_b = TenantId(Uuid::new_v4());
-
-    let c1 = Uuid::new_v4();
-    let c2 = Uuid::new_v4();
-    let c3 = Uuid::new_v4();
-
-    repo.create(
-        &tenant_a,
-        c1,
-        Customer {
-            id: c1,
-            name: "Alice Corp".into(),
-            email: "alice@corp.kz".into(),
-            phone: Some("+7 701 111 1111".into()),
-            status: "active".into(),
-        },
-    );
-    repo.create(
-        &tenant_a,
-        c2,
-        Customer {
-            id: c2,
-            name: "Bob LLC".into(),
-            email: "bob@llc.kz".into(),
-            phone: None,
-            status: "active".into(),
-        },
-    );
-    repo.create(
-        &tenant_b,
-        c3,
-        Customer {
-            id: c3,
-            name: "Charlie Inc".into(),
-            email: "charlie@inc.kz".into(),
-            phone: None,
-            status: "inactive".into(),
-        },
-    );
-
-    (repo, tenant_a, tenant_b, c1, c2, c3)
-}
-
-// ===========================================================================
-// Tests
-// ===========================================================================
-
-// ---- 1. Parse customer page DSL ------------------------------------------
 
 #[test]
-fn parse_customer_page_dsl() {
-    let ast = adapto_parser::parse(CUSTOMER_PAGE_DSL).unwrap();
-
-    assert!(ast.route.is_some());
-    assert!(ast.script.is_some());
-    assert!(ast.template.is_some());
-
-    let route = ast.route.as_ref().unwrap();
-    assert_eq!(route.path.as_deref(), Some("/customers"));
-    assert_eq!(
-        route.permission.as_deref(),
-        Some("customers.read")
-    );
-
-    let script = ast.script.as_ref().unwrap();
-    assert_eq!(script.states.len(), 2);
-    assert_eq!(script.states[0].name, "query");
-    assert_eq!(script.states[1].name, "customers");
-    assert_eq!(script.actions.len(), 2);
-    assert_eq!(script.actions[0].name, "search");
-    assert_eq!(script.actions[1].name, "delete");
+fn field_names() {
+    let fields = Customer::field_names();
+    assert!(fields.contains(&"name"));
+    assert!(fields.contains(&"email"));
+    assert!(fields.contains(&"company"));
+    assert!(fields.contains(&"status"));
+    assert!(fields.contains(&"created_at"));
 }
 
-// ---- 2. Compile customer page --------------------------------------------
-
 #[test]
-fn compile_customer_page() {
-    let ast = adapto_parser::parse(CUSTOMER_PAGE_DSL).unwrap();
-    let mut compiler = Compiler::new();
-    let output = compiler
-        .compile_file(&ast, "customers/page.adapto")
-        .expect("Compile failed");
+fn insert_and_find_by_id() {
+    let store = test_store();
+    Customer::ensure_indexes(&store);
 
-    assert_eq!(output.component_ir.name, "Page");
-    assert!(!output.component_ir.static_segments.is_empty());
-    assert!(!output.component_ir.dynamic_segments.is_empty());
-    assert!(!output.component_ir.events.is_empty());
-    assert!(!output.generated_rust.is_empty());
+    let c = sample_customer("Alice", "alice@test.com");
+    let id = c.insert_into(&store).unwrap();
 
-    // Route entry should exist
-    assert!(output.route_entry.is_some());
-    let route = output.route_entry.unwrap();
-    assert_eq!(route.path, "/customers");
+    let (found_id, found) = Customer::find_by_id(&store, &id).unwrap();
+    assert_eq!(found_id, id);
+    assert_eq!(found.name, "Alice");
+    assert_eq!(found.email, "alice@test.com");
 }
 
-// ---- 3. Tenant isolation: create in A, invisible in B --------------------
-
 #[test]
-fn tenant_isolation_invisible_across_tenants() {
-    let (repo, tenant_a, tenant_b, _, _, _) = seed_repo();
+fn find_all_with_query() {
+    let store = test_store();
+    Customer::ensure_indexes(&store);
 
-    let a_customers = repo.for_tenant(&tenant_a);
-    let b_customers = repo.for_tenant(&tenant_b);
+    sample_customer("Bob", "bob@t.com").insert_into(&store).unwrap();
+    sample_customer("Carol", "carol@t.com").insert_into(&store).unwrap();
 
-    assert_eq!(a_customers.len(), 2);
-    assert_eq!(b_customers.len(), 1);
+    let all = Customer::find_all(&store, Query::new());
+    assert_eq!(all.len(), 2);
 
-    // Tenant A cannot see Charlie (tenant B)
-    let a_names: Vec<&str> = a_customers.iter().map(|c| c.name.as_str()).collect();
-    assert!(!a_names.contains(&"Charlie Inc"));
-
-    // Tenant B cannot see Alice or Bob (tenant A)
-    let b_names: Vec<&str> = b_customers.iter().map(|c| c.name.as_str()).collect();
-    assert!(!b_names.contains(&"Alice Corp"));
-    assert!(!b_names.contains(&"Bob LLC"));
+    let active = Customer::find_all(&store, Query::eq("status", "active"));
+    assert_eq!(active.len(), 2);
 }
 
-// ---- 4. RBAC: admin has delete, viewer doesn't ---------------------------
-
 #[test]
-fn rbac_admin_has_delete_viewer_does_not() {
-    let (rbac, admin, viewer) = setup_rbac();
-
-    let admin_perms = rbac.get_permissions(&admin);
-    let viewer_perms = rbac.get_permissions(&viewer);
-
-    assert!(admin_perms.has("customers.delete"));
-    assert!(!viewer_perms.has("customers.delete"));
+fn count_resources() {
+    let store = test_store();
+    sample_customer("D", "d@t.com").insert_into(&store).unwrap();
+    sample_customer("E", "e@t.com").insert_into(&store).unwrap();
+    assert_eq!(Customer::count(&store), 2);
 }
 
-// ---- 5. Permission check: admin can delete -------------------------------
-
 #[test]
-fn permission_check_admin_can_delete() {
-    let (rbac, admin, _) = setup_rbac();
-    let tenant = TenantId(Uuid::new_v4());
-    let ctx = make_ctx(&admin, &tenant, rbac.get_permissions(&admin));
-
-    assert!(ctx.require("customers.delete").is_ok());
-    assert!(ctx.require("customers.read").is_ok());
-    assert!(ctx.require("customers.create").is_ok());
-    assert!(ctx.require("customers.update").is_ok());
+fn delete_resource() {
+    let store = test_store();
+    let id = sample_customer("F", "f@t.com").insert_into(&store).unwrap();
+    assert!(Customer::delete(&store, &id));
+    assert!(Customer::find_by_id(&store, &id).is_none());
 }
 
-// ---- 6. Permission check: viewer cannot delete ---------------------------
-
 #[test]
-fn permission_check_viewer_cannot_delete() {
-    let (rbac, _, viewer) = setup_rbac();
-    let tenant = TenantId(Uuid::new_v4());
-    let ctx = make_ctx(&viewer, &tenant, rbac.get_permissions(&viewer));
-
-    assert!(ctx.require("customers.read").is_ok());
-    assert!(ctx.require("customers.delete").is_err());
-    assert!(ctx.require("customers.create").is_err());
-    assert!(ctx.require("customers.update").is_err());
+fn get_field_by_name() {
+    let c = sample_customer("Grace", "grace@t.com");
+    assert_eq!(c.get_field("name"), Some("Grace".to_string()));
+    assert_eq!(c.get_field("email"), Some("grace@t.com".to_string()));
+    assert_eq!(c.get_field("unknown"), None);
 }
 
-// ---- 7. Form validation: valid data passes -------------------------------
-
 #[test]
-fn form_validation_valid_data_passes() {
-    let form = customer_form();
-    let data: serde_json::Map<String, serde_json::Value> = serde_json::from_value(json!({
-        "name": "New Customer",
-        "email": "new@customer.kz",
-        "phone": "+7 702 222 2222",
-        "status": "active"
-    }))
-    .unwrap();
-
-    let result = form.validate(&data);
-    assert!(result.is_valid());
+fn to_value_roundtrip() {
+    let c = sample_customer("Hank", "hank@t.com");
+    let val = c.to_value();
+    assert_eq!(val["name"], "Hank");
+    assert_eq!(val["email"], "hank@t.com");
+    assert_eq!(val["status"], "active");
 }
 
-// ---- 8. Form validation: invalid email fails -----------------------------
-
 #[test]
-fn form_validation_invalid_email_fails() {
-    let form = customer_form();
-    let data: serde_json::Map<String, serde_json::Value> = serde_json::from_value(json!({
-        "name": "Valid Name",
-        "email": "not-an-email",
-        "status": "active"
-    }))
-    .unwrap();
+fn update_status_via_store() {
+    let store = test_store();
+    Customer::ensure_indexes(&store);
 
-    let result = form.validate(&data);
-    assert!(!result.is_valid());
+    let c = sample_customer("Ivy", "ivy@t.com");
+    let id = c.insert_into(&store).unwrap();
 
-    let email_errors = result.field_errors("email");
-    assert!(!email_errors.is_empty());
-    assert_eq!(email_errors[0].code, "invalid_email");
+    let col = store.collection("customers");
+    col.update_by_id(&id, Update::Set(vec![("status".into(), json!("lead"))])).unwrap();
+
+    let (_, updated) = Customer::find_by_id(&store, &id).unwrap();
+    assert_eq!(updated.status, "lead");
 }
 
-// ---- 9. Form validation: name too short fails ----------------------------
-
 #[test]
-fn form_validation_name_too_short_fails() {
-    let form = customer_form();
-    let data: serde_json::Map<String, serde_json::Value> = serde_json::from_value(json!({
-        "name": "X",
-        "email": "x@test.kz",
-        "status": "active"
-    }))
-    .unwrap();
+fn unique_email_constraint() {
+    let store = test_store();
+    Customer::ensure_indexes(&store);
 
-    let result = form.validate(&data);
-    assert!(!result.is_valid());
-
-    let name_errors = result.field_errors("name");
-    assert!(!name_errors.is_empty());
-    assert_eq!(name_errors[0].code, "min_length");
+    sample_customer("J1", "same@t.com").insert_into(&store).unwrap();
+    let result = sample_customer("J2", "same@t.com").insert_into(&store);
+    assert!(result.is_err());
 }
 
-// ---- 10. Audit event creation --------------------------------------------
-
 #[test]
-fn audit_event_creation() {
-    let (rbac, admin, _) = setup_rbac();
-    let tenant = TenantId(Uuid::new_v4());
-    let ctx = make_ctx(&admin, &tenant, rbac.get_permissions(&admin));
+fn search_filter() {
+    let store = test_store();
+    sample_customer("Kate Smith", "kate@t.com").insert_into(&store).unwrap();
+    sample_customer("Leo Jones", "leo@t.com").insert_into(&store).unwrap();
 
-    let sink = InMemoryAuditSink::new();
-
-    let event = AuditEvent::new("customer.deleted", &ctx, "delete").success();
-    sink.write(event);
-
-    assert_eq!(sink.len(), 1);
-
-    let events = sink.events();
-    assert_eq!(events[0].event, "customer.deleted");
-    assert_eq!(events[0].action, "delete");
-    assert_eq!(events[0].status, AuditStatus::Success);
-    assert_eq!(events[0].tenant_id, Some(tenant));
-    assert_eq!(events[0].user_id, Some(admin));
-}
-
-// ---- 11. State dirty tracking after search -------------------------------
-
-#[test]
-fn state_dirty_tracking_after_search() {
-    let mut state = StateStore::new();
-    state.set("query", json!(""));
-    state.set("customers", json!([]));
-    state.clear_dirty();
-
-    assert!(!state.is_dirty("query"));
-    assert!(!state.is_dirty("customers"));
-
-    state.set("query", json!("alice"));
-
-    assert!(state.is_dirty("query"));
-    assert!(!state.is_dirty("customers"));
-}
-
-// ---- 12. Dependency graph: customers affects loop segments ---------------
-
-#[test]
-fn dependency_graph_customers_affects_segments() {
-    let ast = adapto_parser::parse(CUSTOMER_PAGE_DSL).unwrap();
-    let mut compiler = Compiler::new();
-    let output = compiler
-        .compile_file(&ast, "customers/page.adapto")
-        .unwrap();
-
-    // The `customers` state drives the {#each} loop, so it must affect segments.
-    let affected_customers = output
-        .dependency_graph
-        .get_affected_segments(&["customers"]);
-    assert!(
-        !affected_customers.is_empty(),
-        "changing 'customers' should affect at least one dynamic segment (the loop)"
-    );
-
-    // `query` only appears in bind:value (a binding, not a dynamic expression),
-    // so it does not register in the dependency graph as a segment dependency.
-    // The dependency graph tracks template expressions, not bindings.
-    let affected_query = output.dependency_graph.get_affected_segments(&["query"]);
-    // query's binding is handled by the runtime's two-way binding system, not
-    // the dependency graph. This is by design.
-    assert!(
-        affected_query.is_empty(),
-        "query is bound via bind:value, not a dynamic segment"
-    );
-}
-
-// ---- 13. Multiple tenants complete isolation -----------------------------
-
-#[test]
-fn multiple_tenants_complete_isolation() {
-    let repo: InMemoryRepository<Customer> = InMemoryRepository::new();
-    let tenants: Vec<TenantId> = (0..5).map(|_| TenantId(Uuid::new_v4())).collect();
-
-    // Seed each tenant with a different number of customers
-    for (i, tenant) in tenants.iter().enumerate() {
-        for j in 0..=i {
-            let id = Uuid::new_v4();
-            repo.create(
-                tenant,
-                id,
-                Customer {
-                    id,
-                    name: format!("Customer {}_{}", i, j),
-                    email: format!("c{}_{}@test.kz", i, j),
-                    phone: None,
-                    status: "active".into(),
-                },
-            );
-        }
-    }
-
-    // Verify each tenant sees only its own customers
-    for (i, tenant) in tenants.iter().enumerate() {
-        assert_eq!(
-            repo.count(tenant),
-            i + 1,
-            "Tenant {} should have {} customers",
-            i,
-            i + 1
-        );
-    }
-
-    // Total across all tenants (admin-only operation)
-    let total: usize = tenants.iter().map(|t| repo.count(t)).sum();
-    assert_eq!(total, 1 + 2 + 3 + 4 + 5);
-}
-
-// ---- 14. Resource DSL parsing --------------------------------------------
-
-#[test]
-fn resource_dsl_parsing() {
-    let ast = adapto_parser::parse(RESOURCE_DSL).unwrap();
-    assert!(ast.resource.is_some());
-
-    let resource = ast.resource.as_ref().unwrap();
-    assert_eq!(resource.name, "Customer");
-    assert_eq!(resource.table, "customers");
-    assert_eq!(resource.primary_key, "id");
-    assert_eq!(
-        resource.tenant,
-        adapto_parser::ast::TenantLevel::Required
-    );
-    assert_eq!(resource.fields.len(), 7);
-    assert_eq!(resource.permissions.len(), 4);
-
-    // Verify specific field properties
-    let name_field = resource.fields.iter().find(|f| f.name == "name").unwrap();
-    assert!(name_field.searchable);
-    assert!(!name_field.readonly);
-
-    let id_field = resource.fields.iter().find(|f| f.name == "id").unwrap();
-    assert!(id_field.readonly);
-
-    // Verify permissions cover all CRUD operations
-    let perm_actions: Vec<&str> = resource
-        .permissions
-        .iter()
-        .map(|p| p.action.as_str())
+    let col = store.collection("customers");
+    let results: Vec<_> = col.find(Query::new())
+        .filter(|d| d.data.to_string().to_lowercase().contains("kate"))
         .collect();
-    assert!(perm_actions.contains(&"read"));
-    assert!(perm_actions.contains(&"create"));
-    assert!(perm_actions.contains(&"update"));
-    assert!(perm_actions.contains(&"delete"));
+    assert_eq!(results.len(), 1);
 }
 
-// ---- 15. Delete customer from repo ---------------------------------------
+#[test]
+fn persistence_roundtrip() {
+    let dir = "/tmp/adapto_crm_test_persist";
+    let _ = std::fs::remove_dir_all(dir);
+
+    {
+        let store = AdaptoStore::open(Some(dir)).unwrap();
+        Customer::ensure_indexes(&store);
+        sample_customer("Persist", "persist@t.com").insert_into(&store).unwrap();
+    }
+
+    {
+        let store = AdaptoStore::open(Some(dir)).unwrap();
+        assert_eq!(Customer::count(&store), 1);
+        let all = Customer::find_all(&store, Query::new());
+        assert_eq!(all[0].1.name, "Persist");
+    }
+
+    let _ = std::fs::remove_dir_all(dir);
+}
 
 #[test]
-fn delete_customer_from_repo() {
-    let (repo, tenant_a, tenant_b, c1, _, c3) = seed_repo();
+fn seed_data_five_customers() {
+    let store = test_store();
+    Customer::ensure_indexes(&store);
 
-    assert_eq!(repo.count(&tenant_a), 2);
-    assert_eq!(repo.count(&tenant_b), 1);
+    let samples = vec![
+        json!({"name": "John Appleseed", "email": "john@apple.com", "company": "Apple Inc.", "status": "active", "created_at": "2025-11-14"}),
+        json!({"name": "Sarah Connor", "email": "sarah@cyberdyne.com", "company": "Cyberdyne Systems", "status": "lead", "created_at": "2026-01-08"}),
+        json!({"name": "Bruce Wayne", "email": "bruce@wayne.com", "company": "Wayne Enterprises", "status": "active", "created_at": "2025-09-22"}),
+        json!({"name": "Ellen Ripley", "email": "ripley@weyland.com", "company": "Weyland Corp", "status": "inactive", "created_at": "2025-06-03"}),
+        json!({"name": "Tony Stark", "email": "tony@stark.com", "company": "Stark Industries", "status": "active", "created_at": "2026-03-19"}),
+    ];
 
-    // Delete a customer from tenant A
-    assert!(repo.delete(&tenant_a, &c1));
-    assert_eq!(repo.count(&tenant_a), 1);
-    assert!(repo.find(&tenant_a, &c1).is_none());
+    let col = store.collection("customers");
+    col.insert_many(samples).unwrap();
 
-    // Tenant B is unaffected
-    assert_eq!(repo.count(&tenant_b), 1);
-    assert!(repo.find(&tenant_b, &c3).is_some());
+    assert_eq!(Customer::count(&store), 5);
 
-    // Deleting same customer again returns false
-    assert!(!repo.delete(&tenant_a, &c1));
+    let active = Customer::find_all(&store, Query::eq("status", "active"));
+    assert_eq!(active.len(), 3);
 
-    // Cannot delete tenant B's customer through tenant A
-    assert!(!repo.delete(&tenant_a, &c3));
-    assert_eq!(repo.count(&tenant_b), 1);
+    let leads = Customer::find_all(&store, Query::eq("status", "lead"));
+    assert_eq!(leads.len(), 1);
+    assert_eq!(leads[0].1.name, "Sarah Connor");
 }

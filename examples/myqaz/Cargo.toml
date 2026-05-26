@@ -1,0 +1,16 @@
+[package]
+name = "example-myqaz"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "myqaz-server"
+path = "src/main.rs"
+
+[dependencies]
+adapto_app = { path = "../../crates/adapto_app" }
+adapto_store = { path = "../../crates/adapto_store" }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

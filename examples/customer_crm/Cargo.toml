@@ -8,21 +8,13 @@ name = "crm-server"
 path = "src/server.rs"
 
 [dependencies]
-adapto_runtime = { path = "../../crates/adapto_runtime" }
-adapto_compiler = { path = "../../crates/adapto_compiler" }
-adapto_client_protocol = { path = "../../crates/adapto_client_protocol" }
-adapto_parser = { path = "../../crates/adapto_parser" }
-adapto_forms = { path = "../../crates/adapto_forms" }
-adapto_db = { path = "../../crates/adapto_db" }
-adapto_auth = { path = "../../crates/adapto_auth" }
-adapto_audit = { path = "../../crates/adapto_audit" }
-adapto_ui = { path = "../../crates/adapto_ui" }
+adapto = { path = "../../crates/adapto" }
+adapto_app = { path = "../../crates/adapto_app" }
+adapto_macros = { path = "../../crates/adapto_macros" }
 adapto_store = { path = "../../crates/adapto_store" }
-adapto_ssr = { path = "../../crates/adapto_ssr" }
-adapto_live = { path = "../../crates/adapto_live" }
+adapto_client_protocol = { path = "../../crates/adapto_client_protocol" }
+adapto_ui = { path = "../../crates/adapto_ui" }
 axum = { workspace = true }
-tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-uuid = { workspace = true }

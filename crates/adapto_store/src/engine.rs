@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use crate::collection::CollectionInner;
 use crate::cursor::Cursor;
+use crate::disk_collection::DiskCollectionInner;
 use crate::document::Document;
 use crate::error::StoreError;
 use crate::index::IndexInfo;
@@ -49,10 +50,11 @@ struct SnapshotData {
 /// Each collection gets its own RwLock, so writes to "users" don't block
 /// reads from "orders". The registry itself is behind a RwLock that's only
 /// write-locked for collection creation/deletion (rare).
+#[derive(Clone)]
 pub struct StorageEngine {
     registry: Arc<RwLock<HashMap<String, Arc<RwLock<CollectionInner>>>>>,
+    disk_registry: Arc<RwLock<HashMap<String, Arc<RwLock<DiskCollectionInner>>>>>,
     wal: Option<Arc<RwLock<WriteAheadLog>>>,
-    #[allow(dead_code)]
     path: Option<PathBuf>,
 }
 
@@ -70,6 +72,7 @@ impl StorageEngine {
 
         let engine = Self {
             registry: Arc::new(RwLock::new(HashMap::new())),
+            disk_registry: Arc::new(RwLock::new(HashMap::new())),
             wal,
             path: base_path,
         };
@@ -411,6 +414,114 @@ impl StorageEngine {
     }
 
     // -----------------------------------------------------------------------
+    // Disk collections
+    // -----------------------------------------------------------------------
+
+    pub fn open_disk_collection(&self, name: &str) -> Result<(), StoreError> {
+        let base = self.path.as_ref().ok_or_else(|| {
+            StoreError::DiskError("disk collections require a storage path".into())
+        })?;
+
+        {
+            let reg = self.disk_registry.read().unwrap();
+            if reg.contains_key(name) {
+                return Ok(());
+            }
+        }
+
+        let inner = DiskCollectionInner::open(name, base)?;
+        let mut reg = self.disk_registry.write().unwrap();
+        reg.insert(name.to_string(), Arc::new(RwLock::new(inner)));
+        Ok(())
+    }
+
+    pub fn disk_bulk_insert(
+        &self,
+        name: &str,
+        docs: Vec<serde_json::Value>,
+    ) -> Result<u64, StoreError> {
+        self.open_disk_collection(name)?;
+        let reg = self.disk_registry.read().unwrap();
+        let col = reg
+            .get(name)
+            .ok_or_else(|| StoreError::CollectionNotFound(name.into()))?;
+        let mut inner = col.write().unwrap();
+        inner.bulk_insert(docs)
+    }
+
+    pub fn disk_find(
+        &self,
+        name: &str,
+        query: &Query,
+    ) -> Cursor {
+        let reg = self.disk_registry.read().unwrap();
+        match reg.get(name) {
+            Some(col) => {
+                let inner = col.read().unwrap();
+                inner.find(query)
+            }
+            None => Cursor::new(Vec::new()),
+        }
+    }
+
+    pub fn disk_find_one(
+        &self,
+        name: &str,
+        query: &Query,
+    ) -> Result<Option<Document>, StoreError> {
+        let reg = self.disk_registry.read().unwrap();
+        match reg.get(name) {
+            Some(col) => {
+                let inner = col.read().unwrap();
+                inner.find_one(query)
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub fn disk_count_all(&self, name: &str) -> u64 {
+        let reg = self.disk_registry.read().unwrap();
+        match reg.get(name) {
+            Some(col) => {
+                let inner = col.read().unwrap();
+                inner.count_all()
+            }
+            None => 0,
+        }
+    }
+
+    pub fn disk_create_index(
+        &self,
+        name: &str,
+        field: &str,
+        unique: bool,
+    ) -> Result<(), StoreError> {
+        self.open_disk_collection(name)?;
+        let reg = self.disk_registry.read().unwrap();
+        let col = reg
+            .get(name)
+            .ok_or_else(|| StoreError::CollectionNotFound(name.into()))?;
+        let mut inner = col.write().unwrap();
+        inner.create_index(field, unique)
+    }
+
+    pub fn disk_indexes(&self, name: &str) -> Vec<IndexInfo> {
+        let reg = self.disk_registry.read().unwrap();
+        match reg.get(name) {
+            Some(col) => col.read().unwrap().indexes(),
+            None => Vec::new(),
+        }
+    }
+
+    pub fn disk_index_keys(&self, name: &str, field: &str) -> Vec<String> {
+        let reg = self.disk_registry.read().unwrap();
+        match reg.get(name) {
+            Some(col) => col.read().unwrap().index_keys(field),
+            None => Vec::new(),
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Stats & compaction
     // -----------------------------------------------------------------------
 
@@ -423,6 +534,13 @@ impl StorageEngine {
             total_documents += inner.count_all();
             total_indexes += inner.indexes().len();
         }
+        let disk_reg = self.disk_registry.read().unwrap();
+        let disk_collections = disk_reg.len();
+        for col in disk_reg.values() {
+            let inner = col.read().unwrap();
+            total_documents += inner.count_all();
+            total_indexes += inner.indexes().len();
+        }
         let wal_size_bytes = self
             .wal
             .as_ref()
@@ -430,7 +548,7 @@ impl StorageEngine {
             .unwrap_or(0);
 
         StoreStats {
-            collections: reg.len(),
+            collections: reg.len() + disk_collections,
             total_documents,
             total_indexes,
             wal_size_bytes,

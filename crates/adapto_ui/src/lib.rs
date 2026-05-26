@@ -136,6 +136,15 @@ pub fn style_tag() -> String {
     format!("<style>{}</style>", bundle_css())
 }
 
+/// Escape a string for safe inclusion in HTML content or attribute values.
+pub fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
+}
+
 /// All CSS constant names and their content, useful for iteration.
 pub fn all_css_files() -> Vec<(&'static str, &'static str)> {
     vec![

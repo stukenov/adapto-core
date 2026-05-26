@@ -243,6 +243,11 @@ impl BTreeIndex {
     pub fn is_empty(&self) -> bool {
         self.tree.is_empty()
     }
+
+    /// Export all entries for serialization.
+    pub fn export_entries(&self) -> Vec<(&IndexKey, &Vec<String>)> {
+        self.tree.iter().collect()
+    }
 }
 
 /// Clone a `Bound<&T>` into a `Bound<T>`.

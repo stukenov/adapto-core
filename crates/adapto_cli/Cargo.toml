@@ -2,6 +2,7 @@
 name = "adapto_cli"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [[bin]]
 name = "adapto"

@@ -14,11 +14,15 @@ members = [
     "crates/adapto_ai",
     "crates/adapto_db",
     "crates/adapto_store",
+    "crates/adapto_macros",
     "crates/adapto_test_utils",
     "crates/adapto_ui",
+    "crates/adapto_app",
+    "crates/adapto",
     "examples/counter",
     "examples/customer_crm",
     "examples/school_ai",
+    "examples/myqaz",
 ]
 
 [workspace.package]
@@ -26,6 +30,9 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 rust-version = "1.75"
+authors = ["Saken Tukenov <saken@tukenov.kz>"]
+repository = "https://github.com/stukenov/adapto-core"
+homepage = "https://github.com/stukenov/adapto-core"
 
 [workspace.dependencies]
 # Async runtime
