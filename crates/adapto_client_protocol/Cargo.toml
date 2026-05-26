@@ -2,7 +2,11 @@
 name = "adapto_client_protocol"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "WebSocket protocol types for Adapto client-server communication"
 
 [dependencies]
 serde = { workspace = true }
