@@ -7,6 +7,7 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Embedded document database for Rust — JSON documents, BTree indexes, WAL"
+readme = "README.md"
 
 [dependencies]
 serde = { workspace = true }

@@ -7,11 +7,12 @@ authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "App builder for Adapto — declarative routes, multilingual support, WebSocket"
+readme = "README.md"
 
 [dependencies]
-adapto_store = { path = "../adapto_store", version = "0.1.0" }
-adapto_ui = { path = "../adapto_ui", version = "0.1.0" }
-adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.1.0" }
+adapto_store = { path = "../adapto_store", version = "0.1.1" }
+adapto_ui = { path = "../adapto_ui", version = "0.1.1" }
+adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.1.1" }
 axum = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
