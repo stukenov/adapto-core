@@ -71,6 +71,16 @@ pub async fn ws_event_loop(mut socket: WebSocket, state: Arc<AppState>) {
     let mut session: HashMap<String, String> = HashMap::new();
 
     while let Some(Ok(msg)) = socket.recv().await {
+        match &msg {
+            Message::Ping(data) => {
+                if socket.send(Message::Pong(data.clone())).await.is_err() {
+                    break;
+                }
+                continue;
+            }
+            Message::Close(_) => break,
+            _ => {}
+        }
         if let Message::Text(text) = msg {
             let val: Value = match serde_json::from_str(&text) {
                 Ok(v) => v,

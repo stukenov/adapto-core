@@ -81,7 +81,7 @@ impl Filter {
             Filter::Regex(field, pattern) => {
                 resolve_path(&doc.data, field)
                     .and_then(Value::as_str)
-                    .map_or(false, |s| simple_regex_match(s, pattern))
+                    .map_or(false, |s| regex_match(s, pattern))
             }
             Filter::Contains(field, substr) => {
                 resolve_path(&doc.data, field)
@@ -123,58 +123,10 @@ pub fn compare_values(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
     }
 }
 
-/// A minimal regex matcher supporting `^`, `$`, and `.*` patterns.
-/// Not a full regex engine — covers the most common document-query cases
-/// without pulling in the `regex` crate.
-fn simple_regex_match(haystack: &str, pattern: &str) -> bool {
-    let anchored_start = pattern.starts_with('^');
-    let anchored_end = pattern.ends_with('$');
-
-    let inner = pattern
-        .trim_start_matches('^')
-        .trim_end_matches('$');
-
-    // ".*" within the pattern acts as a wildcard
-    let parts: Vec<&str> = inner.split(".*").collect();
-
-    if parts.len() == 1 {
-        // No wildcard
-        let needle = parts[0];
-        if anchored_start && anchored_end {
-            haystack == needle
-        } else if anchored_start {
-            haystack.starts_with(needle)
-        } else if anchored_end {
-            haystack.ends_with(needle)
-        } else {
-            haystack.contains(needle)
-        }
-    } else {
-        // Wildcard segments — each must appear in order
-        let mut remaining = haystack;
-        for (i, part) in parts.iter().enumerate() {
-            if part.is_empty() {
-                continue;
-            }
-            if i == 0 && anchored_start {
-                if !remaining.starts_with(part) {
-                    return false;
-                }
-                remaining = &remaining[part.len()..];
-            } else if let Some(pos) = remaining.find(part) {
-                remaining = &remaining[pos + part.len()..];
-            } else {
-                return false;
-            }
-        }
-        if anchored_end {
-            if let Some(last) = parts.last() {
-                if !last.is_empty() {
-                    return haystack.ends_with(last);
-                }
-            }
-        }
-        true
+fn regex_match(haystack: &str, pattern: &str) -> bool {
+    match regex::Regex::new(pattern) {
+        Ok(re) => re.is_match(haystack),
+        Err(_) => false,
     }
 }
 

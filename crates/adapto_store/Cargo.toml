@@ -16,6 +16,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 memmap2 = "0.9"
+regex = "1"
 rmp-serde = "1"
 
 [[bench]]

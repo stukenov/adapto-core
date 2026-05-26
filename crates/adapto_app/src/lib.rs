@@ -21,7 +21,7 @@ pub mod layout;
 pub mod views;
 
 use axum::extract::ws::WebSocketUpgrade;
-use axum::extract::{Path, Query as AxumQuery, State};
+use axum::extract::{Path, State};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
@@ -191,6 +191,7 @@ pub struct App {
     port: u16,
     store_path: Option<String>,
     prebuilt_store: Option<adapto_store::AdaptoStore>,
+    bind_addr: String,
     resources: Vec<ResourceEntry>,
     custom_routes: Vec<CustomRoute>,
     action_handlers:
@@ -210,6 +211,7 @@ impl App {
             port: 3000,
             store_path: None,
             prebuilt_store: None,
+            bind_addr: "0.0.0.0".to_string(),
             resources: Vec::new(),
             custom_routes: Vec::new(),
             action_handlers: HashMap::new(),
@@ -236,6 +238,13 @@ impl App {
     /// This allows importing data before starting the server.
     pub fn store(mut self, store: adapto_store::AdaptoStore) -> Self {
         self.prebuilt_store = Some(store);
+        self
+    }
+
+    /// Set the bind address. Defaults to `"0.0.0.0"`.
+    /// Use `"127.0.0.1"` to restrict to localhost only.
+    pub fn bind(mut self, addr: impl Into<String>) -> Self {
+        self.bind_addr = addr.into();
         self
     }
 
@@ -337,6 +346,12 @@ impl App {
         handler: impl Fn(RequestContext) -> R + Send + Sync + 'static,
     ) -> Self {
         let path = path.into();
+        if self.language_routes.is_empty() {
+            panic!(
+                "localized_page(\"{}\") called but no languages configured. Call .languages() first.",
+                path
+            );
+        }
         let handler = Arc::new(move |ctx: RequestContext| -> PageResponse { handler(ctx).into() });
         for lang in &self.language_routes {
             let full_path = format!("{}{}", lang.prefix, path);
@@ -403,7 +418,7 @@ impl App {
     /// 5. Set up the WebSocket endpoint at `/ws`
     /// 6. Bind to the configured port and begin serving
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        tracing_subscriber::fmt::init();
+        let _ = tracing_subscriber::fmt::try_init();
 
         // 1. Open store (use prebuilt if provided)
         let store = if let Some(s) = self.prebuilt_store {
@@ -511,14 +526,10 @@ impl App {
                         &custom.path,
                         get(
                             move |State(state): State<Arc<handler::AppState>>,
-                                  Path(params): Path<HashMap<String, String>>,
-                                  AxumQuery(query_map): AxumQuery<HashMap<String, String>>,
+                                  params_opt: Option<Path<HashMap<String, String>>>,
                                   req_uri: axum::http::Uri| {
-                                let query_str = query_map
-                                    .iter()
-                                    .map(|(k, v)| format!("{k}={v}"))
-                                    .collect::<Vec<_>>()
-                                    .join("&");
+                                let params = params_opt.map(|p| p.0).unwrap_or_default();
+                                let query_str = req_uri.query().unwrap_or("").to_string();
                                 let ctx = RequestContext {
                                     state: state.clone(),
                                     params,
@@ -604,6 +615,9 @@ impl App {
                 let path = req.uri().path();
                 if path.len() > 1 && path.ends_with('/') {
                     let trimmed = path.trim_end_matches('/');
+                    if trimmed.starts_with("//") || !trimmed.starts_with('/') {
+                        return (axum::http::StatusCode::BAD_REQUEST, "Bad Request").into_response();
+                    }
                     let new_uri = if let Some(q) = req.uri().query() {
                         format!("{trimmed}?{q}")
                     } else {
@@ -628,7 +642,7 @@ impl App {
         });
 
         // 5. Bind and serve
-        let addr = format!("127.0.0.1:{}", self.port);
+        let addr = format!("{}:{}", self.bind_addr, self.port);
         println!();
         println!("  {} running at http://{}", self.title, addr);
         if let Some(ref path) = self.store_path {

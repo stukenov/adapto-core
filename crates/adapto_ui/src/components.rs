@@ -25,6 +25,24 @@ pub enum ButtonSize {
     Large,
 }
 
+/// HTML button type attribute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ButtonType {
+    Button,
+    Submit,
+    Reset,
+}
+
+impl ButtonType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            ButtonType::Button => "button",
+            ButtonType::Submit => "submit",
+            ButtonType::Reset => "reset",
+        }
+    }
+}
+
 /// A builder for `<button class="au-btn ...">`.
 #[derive(Debug, Clone)]
 pub struct Button {
@@ -34,7 +52,7 @@ pub struct Button {
     disabled: bool,
     loading: bool,
     icon_html: Option<String>,
-    r#type: String,
+    r#type: ButtonType,
 }
 
 impl Button {
@@ -71,7 +89,7 @@ impl Button {
             disabled: false,
             loading: false,
             icon_html: None,
-            r#type: "button".to_string(),
+            r#type: ButtonType::Button,
         }
     }
 
@@ -99,9 +117,9 @@ impl Button {
         self
     }
 
-    /// Set the button type attribute (button, submit, reset).
-    pub fn button_type(mut self, t: &str) -> Self {
-        self.r#type = t.to_string();
+    /// Set the button type attribute.
+    pub fn button_type(mut self, t: ButtonType) -> Self {
+        self.r#type = t;
         self
     }
 
@@ -146,7 +164,7 @@ impl Button {
 
         format!(
             "<button type=\"{}\" class=\"{}\"{}>{}{}</button>",
-            self.r#type,
+            self.r#type.as_str(),
             classes.join(" "),
             disabled_attr,
             icon_part,
@@ -938,14 +956,7 @@ impl Breadcrumb {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Minimal HTML escaping for attribute values and text content.
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
-}
+use crate::html_escape;
 
 // ---------------------------------------------------------------------------
 // Tests

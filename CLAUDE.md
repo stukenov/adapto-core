@@ -231,3 +231,13 @@ cargo zigbuild --release --target x86_64-unknown-linux-gnu
 ```
 
 Requires `cargo-zigbuild`: `cargo install cargo-zigbuild`
+
+## Changelog (MANDATORY)
+
+**Every change to the framework MUST be documented in `CHANGELOG.md`.**
+
+- Use [Keep a Changelog](https://keepachangelog.com/) format.
+- Group by: Added, Changed, Fixed, Removed.
+- Include file:line references for significant fixes.
+- Bump version in root `Cargo.toml` `[workspace.package]` before publishing.
+- After publishing to crates.io, tag the commit: `git tag v0.X.Y && git push --tags`.

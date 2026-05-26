@@ -26,7 +26,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "MIT"
 rust-version = "1.75"
@@ -49,8 +49,6 @@ pest = "2.7"
 pest_derive = "2.7"
 # Database
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono"] }
-# Validation
-garde = { version = "0.18", features = ["derive"] }
 # Tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

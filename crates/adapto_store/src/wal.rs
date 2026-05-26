@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use chrono::{DateTime, Utc};
+
 use crate::error::StoreError;
 
 // ---------------------------------------------------------------------------
@@ -19,6 +21,10 @@ pub enum WalEntry {
         doc_id: String,
         data: Value,
         tenant_id: Option<String>,
+        #[serde(default = "Utc::now")]
+        created_at: DateTime<Utc>,
+        #[serde(default = "Utc::now")]
+        updated_at: DateTime<Utc>,
     },
     Update {
         collection: String,
@@ -79,6 +85,8 @@ impl WriteAheadLog {
         let line = serde_json::to_string(entry)
             .map_err(|e| StoreError::Serialization(e.to_string()))?;
         writeln!(self.file, "{}", line)?;
+        self.file.flush()?;
+        self.file.sync_data()?;
         Ok(())
     }
 

@@ -165,7 +165,8 @@ fn live_js_contains_event_dispatch() {
 
 #[test]
 fn live_js_contains_reconnect_logic() {
-    assert!(LIVE_JS.contains("setTimeout(connect, 2000)"));
+    assert!(LIVE_JS.contains("reconnecting"));
+    assert!(LIVE_JS.contains("connect()"));
 }
 
 #[test]

@@ -27,8 +27,14 @@
         }
       } catch(err) { console.error('[Adapto]', err); }
     };
-    ws.onclose = function() { setTimeout(connect, 2000); };
-    ws.onerror = function() { ws.close(); };
+    var reconnecting = false;
+    ws.onclose = function() {
+      if (!reconnecting) {
+        reconnecting = true;
+        setTimeout(function() { reconnecting = false; connect(); }, 2000);
+      }
+    };
+    ws.onerror = function() {};
   }
 
   function send(handler, payload) {
@@ -43,6 +49,10 @@
 
   // URL routing via pushState
   window.__adapto_navigate = function(path) {
+    if (path.indexOf('://') !== -1 || path.indexOf('//') === 0) {
+      location.href = path;
+      return;
+    }
     history.pushState(null, '', path);
     send('navigate', { path: path });
   };

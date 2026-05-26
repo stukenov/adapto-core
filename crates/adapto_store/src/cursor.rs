@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::document::Document;
 
 /// A lazy iterator over query results.
@@ -5,41 +7,35 @@ use crate::document::Document;
 /// Provides both an explicit `next()` method and implements `Iterator`
 /// so callers can use `for doc in cursor { ... }` or `.collect()`.
 pub struct Cursor {
-    documents: Vec<Document>,
-    position: usize,
+    documents: VecDeque<Document>,
 }
 
 impl Cursor {
     /// Create a cursor wrapping a pre-resolved list of documents.
     pub(crate) fn new(documents: Vec<Document>) -> Self {
         Self {
-            documents,
-            position: 0,
+            documents: VecDeque::from(documents),
         }
     }
 
     /// Peek at the next document without advancing.
     pub fn peek(&self) -> Option<&Document> {
-        self.documents.get(self.position)
+        self.documents.front()
     }
 
     /// Consume the cursor and collect all remaining documents.
     pub fn collect_docs(self) -> Vec<Document> {
-        self.documents.into_iter().skip(self.position).collect()
+        self.documents.into()
     }
 
     /// Number of remaining documents.
     pub fn count(&self) -> usize {
-        self.documents.len().saturating_sub(self.position)
+        self.documents.len()
     }
 
     /// Consume the cursor and return the first document (if any).
     pub fn first(mut self) -> Option<Document> {
-        if self.position < self.documents.len() {
-            Some(self.documents.swap_remove(self.position))
-        } else {
-            None
-        }
+        self.documents.pop_front()
     }
 }
 
@@ -47,18 +43,12 @@ impl Iterator for Cursor {
     type Item = Document;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.position < self.documents.len() {
-            let doc = self.documents[self.position].clone();
-            self.position += 1;
-            Some(doc)
-        } else {
-            None
-        }
+        self.documents.pop_front()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.documents.len().saturating_sub(self.position);
-        (remaining, Some(remaining))
+        let len = self.documents.len();
+        (len, Some(len))
     }
 }
 

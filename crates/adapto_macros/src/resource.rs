@@ -148,7 +148,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
         let ident = &f.ident;
         let name = ident.to_string();
         quote! {
-            #name => Some(self.#ident.clone()),
+            #name => Some(format!("{}", self.#ident)),
         }
     });
 

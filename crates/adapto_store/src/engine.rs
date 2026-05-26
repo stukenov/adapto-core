@@ -78,6 +78,7 @@ impl StorageEngine {
         };
 
         engine.replay_wal()?;
+        engine.auto_open_disk_collections()?;
         Ok(engine)
     }
 
@@ -112,11 +113,12 @@ impl StorageEngine {
         let mut reg = self.registry.write().unwrap();
         reg.remove(name)
             .ok_or_else(|| StoreError::CollectionNotFound(name.to_string()))?;
-        drop(reg);
-        self.wal_append(&WalEntry::DropCollection {
+        // WAL append while still holding write lock to prevent TOCTOU with get_or_create
+        let wal_result = self.wal_append(&WalEntry::DropCollection {
             name: name.to_string(),
-        })?;
-        Ok(())
+        });
+        drop(reg);
+        wal_result
     }
 
     // -----------------------------------------------------------------------
@@ -130,15 +132,25 @@ impl StorageEngine {
         tenant_id: Option<String>,
     ) -> Result<String, StoreError> {
         let col = self.get_or_create(collection);
-        let id = {
+        let (id, created_at, updated_at) = {
             let mut inner = col.write().unwrap();
-            inner.insert(doc.clone(), tenant_id.clone())?
+            let id = inner.insert(doc.clone(), tenant_id.clone())?;
+            let timestamps = inner
+                .find_by_id(&id, None)?
+                .map(|d| (d.created_at, d.updated_at))
+                .unwrap_or_else(|| {
+                    let now = chrono::Utc::now();
+                    (now, now)
+                });
+            (id, timestamps.0, timestamps.1)
         };
         self.wal_append(&WalEntry::Insert {
             collection: collection.to_string(),
             doc_id: id.clone(),
             data: doc,
             tenant_id,
+            created_at,
+            updated_at,
         })?;
         Ok(id)
     }
@@ -151,20 +163,32 @@ impl StorageEngine {
     ) -> Result<Vec<String>, StoreError> {
         let col = self.get_or_create(collection);
         let mut ids = Vec::with_capacity(docs.len());
-        // Hold lock once for all inserts — much faster than per-doc lock
+        let mut timestamps = Vec::with_capacity(docs.len());
         {
             let mut inner = col.write().unwrap();
             for doc in &docs {
-                ids.push(inner.insert(doc.clone(), tenant_id.clone())?);
+                let id = inner.insert(doc.clone(), tenant_id.clone())?;
+                let ts = inner
+                    .find_by_id(&id, None)?
+                    .map(|d| (d.created_at, d.updated_at))
+                    .unwrap_or_else(|| {
+                        let now = chrono::Utc::now();
+                        (now, now)
+                    });
+                timestamps.push(ts);
+                ids.push(id);
             }
         }
-        // WAL entries
-        for (doc, id) in docs.into_iter().zip(ids.iter()) {
+        for ((doc, id), (created_at, updated_at)) in
+            docs.into_iter().zip(ids.iter()).zip(timestamps.iter())
+        {
             self.wal_append(&WalEntry::Insert {
                 collection: collection.to_string(),
                 doc_id: id.clone(),
                 data: doc,
                 tenant_id: tenant_id.clone(),
+                created_at: *created_at,
+                updated_at: *updated_at,
             })?;
         }
         Ok(ids)
@@ -218,9 +242,18 @@ impl StorageEngine {
         let col = self.get_or_create(collection);
         let (result, affected) = {
             let mut inner = col.write().unwrap();
+            // Collect IDs BEFORE mutation — the query filter may not match after update
+            let ids_before: Vec<String> = inner
+                .find(query, tenant_id)
+                .map(|d| d.id.clone())
+                .collect();
             let result = inner.update(query, update, tenant_id)?;
+            // Snapshot updated documents by ID (they now contain new values)
             let affected: Vec<Document> = if result.modified > 0 {
-                inner.find(query, tenant_id).collect_docs()
+                ids_before
+                    .iter()
+                    .filter_map(|id| inner.find_by_id(id, None).ok().flatten())
+                    .collect()
             } else {
                 Vec::new()
             };
@@ -248,7 +281,7 @@ impl StorageEngine {
             let mut inner = col.write().unwrap();
             let changed = inner.update_by_id(id, update, tenant_id)?;
             let snap = if changed {
-                inner.find_by_id(id, None)?
+                inner.find_by_id(id, tenant_id)?
             } else {
                 None
             };
@@ -601,6 +634,29 @@ impl StorageEngine {
         SnapshotData { collections }
     }
 
+    fn auto_open_disk_collections(&self) -> Result<(), StoreError> {
+        let Some(ref base) = self.path else {
+            return Ok(());
+        };
+        let disk_dir = base.join("disk");
+        if !disk_dir.exists() {
+            return Ok(());
+        }
+        if let Ok(entries) = std::fs::read_dir(&disk_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        if path.extension().and_then(|e| e.to_str()) == Some("dat") {
+                            let _ = self.open_disk_collection(stem);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn replay_wal(&self) -> Result<(), StoreError> {
         let Some(ref wal) = self.wal else {
             return Ok(());
@@ -621,14 +677,16 @@ impl StorageEngine {
                     doc_id,
                     data,
                     tenant_id,
+                    created_at,
+                    updated_at,
                 } => {
                     let col = self.get_or_create(&collection);
                     let mut inner = col.write().unwrap();
                     let doc = Document {
                         id: doc_id,
                         data,
-                        created_at: chrono::Utc::now(),
-                        updated_at: chrono::Utc::now(),
+                        created_at,
+                        updated_at,
                         tenant_id,
                     };
                     let _ = inner.insert_raw(doc);

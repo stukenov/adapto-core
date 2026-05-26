@@ -1,0 +1,62 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+
+## [0.1.2] - 2026-05-26
+
+### Fixed
+
+#### adapto_store — Critical WAL fixes
+- **WAL update data loss** — `update()` now collects document IDs before mutation, then snapshots after. Previously, re-querying post-mutation returned 0 documents if the query field was changed, silently dropping WAL entries. (`engine.rs:219-236`)
+- **WAL no fsync** — `append()` now calls `flush()` + `sync_data()` after every write. Previously, data sat in OS buffer and was lost on power failure. (`wal.rs:78-83`)
+- **WAL replay lost timestamps** — `WalEntry::Insert` now stores `created_at`/`updated_at`. Previously, replay used `Utc::now()`, destroying original timestamps. (`engine.rs:626-634`)
+- **drop_collection TOCTOU** — WAL append now runs under write lock to prevent ghost collections from concurrent `get_or_create`. (`engine.rs:111-120`)
+- **update_by_id tenant leak** — WAL snapshot now uses caller's `tenant_id` instead of `None`. (`engine.rs:251`)
+- **Cursor clones on iteration** — Replaced `Vec<Document>` + positional clone with `VecDeque::pop_front()`. Zero-copy iteration. (`cursor.rs`)
+- **Fake regex engine** — `Filter::Regex` now uses the `regex` crate. Previously, `simple_regex_match` silently gave wrong results for character classes, alternation, quantifiers. (`query.rs`)
+- **DiskCollections not auto-reopened** — Store now scans `disk/` directory on open and auto-registers all `.dat` files. No more manual re-registration after restart. (`engine.rs`)
+
+#### adapto_app — Security and correctness
+- **Open redirect** — Trailing-slash redirect now rejects paths starting with `//` (protocol-relative URLs). Previously `//evil.com/` produced `301 → //evil.com`. (`lib.rs:605`)
+- **tracing panic** — Replaced `tracing_subscriber::fmt::init()` with `try_init()`. No longer panics on second call or when user sets their own subscriber. (`lib.rs:406`)
+- **localized_page silent no-op** — Now panics with clear message if called before `.languages()`. Previously registered 0 routes silently. (`lib.rs:334`)
+- **WebSocket Ping/Pong** — Event loop now responds to Ping frames and handles Close frames. Previously, proxied connections dropped on timeout. (`handler.rs:73`)
+- **ctx.query data loss** — Now uses raw `uri.query()` instead of HashMap re-encoding. Preserves URL encoding and parameter order. (`lib.rs:517`)
+- **Path extractor on parameterless routes** — Changed to `Option<Path<...>>` to avoid axum rejection on routes without `:param` segments. (`lib.rs:511`)
+
+### Changed
+
+#### adapto_app
+- **Default bind address** — Changed from `127.0.0.1` to `0.0.0.0`. Added `.bind()` builder method. (`lib.rs:631`)
+- **live.js reconnect** — Added guard to prevent duplicate WebSocket connections on error/close double-fire. (`live.js:30`)
+- **live.js external links** — `__adapto_navigate` now detects external URLs and falls back to `location.href`. (`live.js:56`)
+
+#### adapto_ui
+- **ButtonType enum** — Replaced `button_type(&str)` with `button_type(ButtonType)` enum. Eliminates attribute injection. (`components.rs:103`)
+- **Single html_escape** — Removed duplicate private `html_escape()` from `components.rs`. Now uses `crate::html_escape`. (`components.rs:960`)
+
+#### adapto_macros
+- **get_field works for all types** — Generated `get_field()` now uses `format!("{}", self.field)` instead of `.clone()`. Works with `i64`, `bool`, any `Display` type. (`resource.rs:148`)
+
+#### Workspace
+- Removed unused `garde` from workspace dependencies.
+
+## [0.1.1] - 2026-05-26
+
+### Added
+- Per-crate README files for crates.io (adapto_store, adapto_app, adapto_ui, adapto_client_protocol)
+- Root README with badges, production mention, comprehensive examples
+
+## [0.1.0] - 2026-05-26
+
+### Added
+- Initial release of adapto_store, adapto_app, adapto_ui, adapto_client_protocol
+- PageResponse enum (Ok/NotFound/Redirect) for proper HTTP status codes
+- LangConfig trait + localized_page() for multilingual routing
+- slugify() with Cyrillic transliteration (Russian + Kazakh)
+- DiskCollection: mmap-backed storage for large datasets
+- adapto_macros: #[derive(Resource)] proc macro
+- MIT license
