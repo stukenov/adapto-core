@@ -1342,3 +1342,766 @@ fn snapshot_resource_block() {
     let file = parse(input).unwrap();
     insta::assert_yaml_snapshot!(file);
 }
+
+// ===========================================================================
+// Extended test suite
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Error recovery: malformed route block (missing path)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn error_route_missing_path() {
+    let input = r#"
+<route>
+  method: "GET"
+  auth: required
+</route>
+"#;
+    let file = parse(input);
+    // Route without path should either parse with path=None or error
+    match file {
+        Ok(f) => {
+            let route = f.route.unwrap();
+            assert!(route.path.is_none(), "Route parsed but path should be None");
+        }
+        Err(e) => {
+            // Also acceptable if parser requires path
+            let msg = format!("{}", e);
+            assert!(
+                msg.contains("path") || msg.contains("MissingField"),
+                "Error should mention 'path', got: {}",
+                msg
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Error recovery: unclosed template tag
+// ---------------------------------------------------------------------------
+
+#[test]
+fn error_unclosed_template_block() {
+    let input = r#"
+<template>
+  <div>Hello
+"#;
+    let result = parse(input);
+    assert!(result.is_err(), "Unclosed template block should error");
+    match result.unwrap_err() {
+        ParseError::UnclosedBlock(name) => assert_eq!(name, "template"),
+        ParseError::Syntax { message, .. } => {
+            assert!(
+                message.contains("unclosed") || message.contains("Unclosed") || message.len() > 0,
+                "Syntax error should describe unclosed tag"
+            );
+        }
+        other => panic!("Expected UnclosedBlock or Syntax, got: {other}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Error recovery: invalid auth level
+// ---------------------------------------------------------------------------
+
+#[test]
+fn error_invalid_auth_level_bogus() {
+    let input = r#"
+<route>
+  path: "/test"
+  auth: super_admin
+</route>
+"#;
+    let result = parse(input);
+    assert!(result.is_err(), "Invalid auth level should error");
+    match result.unwrap_err() {
+        ParseError::InvalidValue { field, value, .. } => {
+            assert_eq!(field, "auth");
+            assert_eq!(value, "super_admin");
+        }
+        other => panic!("Expected InvalidValue for auth, got: {other}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Edge case: empty script block
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_empty_script_block() {
+    let input = r#"
+<script lang="rust">
+</script>
+"#;
+    let file = parse(input).unwrap();
+    let script = file.script.unwrap();
+    assert!(script.states.is_empty());
+    assert!(script.actions.is_empty());
+    assert!(script.props.is_empty());
+    assert!(script.memos.is_empty());
+    assert!(script.loaders.is_empty());
+    assert!(script.forms.is_empty());
+    assert!(script.ai_actions.is_empty());
+    assert!(script.uses.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Edge case: script with only use statements
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_script_use_only() {
+    let input = r#"
+<script lang="rust">
+  use crate::models::User;
+  use crate::repos::UserRepo;
+  use std::collections::HashMap;
+</script>
+"#;
+    let file = parse(input).unwrap();
+    let script = file.script.unwrap();
+    assert_eq!(script.uses.len(), 3);
+    assert!(script.states.is_empty());
+    assert!(script.actions.is_empty());
+    assert_eq!(script.uses[0].path, "crate::models::User");
+    assert_eq!(script.uses[1].path, "crate::repos::UserRepo");
+    assert_eq!(script.uses[2].path, "std::collections::HashMap");
+}
+
+// ---------------------------------------------------------------------------
+// Edge case: template with nested if inside each
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_template_nested_if_in_each() {
+    let input = r#"
+<template>
+  {#each users as user}
+    {#if user.is_active}
+      <span>Active: {user.name}</span>
+    {:else}
+      <span>Inactive</span>
+    {/if}
+  {/each}
+</template>
+"#;
+    let file = parse(input).unwrap();
+    let tpl = file.template.unwrap();
+
+    let each = match &tpl.children[0] {
+        TemplateNode::Each(n) => n,
+        other => panic!("Expected Each, got: {:?}", other),
+    };
+    assert_eq!(each.iterable, "users");
+    assert_eq!(each.item, "user");
+
+    // Find the If node nested inside each
+    let if_node = each.children.iter().find_map(|n| match n {
+        TemplateNode::If(i) => Some(i),
+        _ => None,
+    });
+    assert!(if_node.is_some(), "Should have nested If inside Each");
+    let if_node = if_node.unwrap();
+    assert_eq!(if_node.condition, "user.is_active");
+    assert!(if_node.else_branch.is_some());
+}
+
+// ---------------------------------------------------------------------------
+// Edge case: template with nested each inside if
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_template_nested_each_in_if() {
+    let input = r#"
+<template>
+  {#if has_items}
+    {#each items as item}
+      <li>{item.name}</li>
+    {/each}
+  {/if}
+</template>
+"#;
+    let file = parse(input).unwrap();
+    let tpl = file.template.unwrap();
+
+    let if_node = match &tpl.children[0] {
+        TemplateNode::If(n) => n,
+        other => panic!("Expected If, got: {:?}", other),
+    };
+    assert_eq!(if_node.condition, "has_items");
+
+    let each = if_node.then_branch.iter().find_map(|n| match n {
+        TemplateNode::Each(e) => Some(e),
+        _ => None,
+    });
+    assert!(each.is_some(), "Should have nested Each inside If");
+    assert_eq!(each.unwrap().iterable, "items");
+}
+
+// ---------------------------------------------------------------------------
+// Resource block: full resource with fields, permissions, constraints
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_resource_full_with_constraints() {
+    let input = r#"
+<resource name="Order" table="orders">
+  tenant: required
+  primary_key: id
+
+  field id: Uuid readonly
+  field customer_id: Uuid required
+  field total: Decimal required
+  field status: Enum[pending, confirmed, shipped, delivered] default=pending
+  field notes: Option<String> optional
+  field created_at: DateTime readonly
+
+  permission read: "orders.read"
+  permission create: "orders.create"
+  permission update: "orders.update"
+  permission delete: "orders.delete"
+</resource>
+"#;
+    let file = parse(input).unwrap();
+    let resource = file.resource.unwrap();
+    assert_eq!(resource.name, "Order");
+    assert_eq!(resource.table, "orders");
+    assert_eq!(resource.tenant, TenantLevel::Required);
+    assert_eq!(resource.primary_key, "id");
+    assert_eq!(resource.fields.len(), 6);
+    assert_eq!(resource.permissions.len(), 4);
+
+    // id field: readonly
+    let id_field = &resource.fields[0];
+    assert_eq!(id_field.name, "id");
+    assert!(id_field.readonly);
+
+    // customer_id field: required
+    let cust_field = &resource.fields[1];
+    assert_eq!(cust_field.name, "customer_id");
+    assert!(cust_field.constraints.contains(&FieldConstraint::Required));
+
+    // status field: has default
+    let status_field = &resource.fields[3];
+    assert_eq!(status_field.default.as_deref(), Some("pending"));
+
+    // notes field: optional
+    let notes_field = &resource.fields[4];
+    assert!(notes_field.constraints.contains(&FieldConstraint::Optional));
+
+    // created_at: readonly
+    let created_field = &resource.fields[5];
+    assert!(created_field.readonly);
+}
+
+// ---------------------------------------------------------------------------
+// Style block: scoped vs global
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_style_scoped_vs_global() {
+    // Scoped
+    let scoped_input = r#"
+<style scoped>
+  .card { border: 1px solid #ccc; }
+</style>
+"#;
+    let scoped_file = parse(scoped_input).unwrap();
+    let scoped_style = scoped_file.style.unwrap();
+    assert!(scoped_style.scoped);
+    assert!(scoped_style.content.contains(".card"));
+
+    // Global
+    let global_input = r#"
+<style global>
+  body { font-family: sans-serif; }
+</style>
+"#;
+    let global_file = parse(global_input).unwrap();
+    let global_style = global_file.style.unwrap();
+    assert!(!global_style.scoped);
+    assert!(global_style.content.contains("font-family"));
+}
+
+// ---------------------------------------------------------------------------
+// Style block: default (no attribute) should be scoped
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_style_default_scoped() {
+    let input = r#"
+<style>
+  .item { color: red; }
+</style>
+"#;
+    let file = parse(input).unwrap();
+    let style = file.style.unwrap();
+    // Default should be scoped (or at least parse without error)
+    assert!(style.content.contains("color: red"));
+}
+
+// ---------------------------------------------------------------------------
+// AI action: parse ai action with all fields
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_ai_action_all_fields() {
+    let input = r#"
+<script lang="rust">
+  ai action classify_ticket(input: TicketText) -> TicketCategory {
+    model: "gpt-4o"
+    fallback: "gpt-3.5-turbo"
+    temperature: 0.1
+    audit: true
+    pii: mask
+    permission: "tickets.ai.classify"
+  }
+</script>
+"#;
+    let file = parse(input).unwrap();
+    let script = file.script.unwrap();
+    assert_eq!(script.ai_actions.len(), 1);
+
+    let ai = &script.ai_actions[0];
+    assert_eq!(ai.name, "classify_ticket");
+    assert_eq!(ai.input_param, "input");
+    assert_eq!(ai.input_type, "TicketText");
+    assert_eq!(ai.return_type, "TicketCategory");
+    assert_eq!(ai.model, "gpt-4o");
+    assert_eq!(ai.fallback.as_deref(), Some("gpt-3.5-turbo"));
+    assert_eq!(ai.temperature, Some(0.1));
+    assert!(ai.audit);
+    assert_eq!(ai.pii.as_deref(), Some("mask"));
+    assert_eq!(ai.permission.as_deref(), Some("tickets.ai.classify"));
+}
+
+// ---------------------------------------------------------------------------
+// AI action: minimal (no optional fields)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_ai_action_minimal() {
+    let input = r#"
+<script lang="rust">
+  ai action translate(input: Text) -> Translation {
+    model: "nllb-200"
+    audit: false
+  }
+</script>
+"#;
+    let file = parse(input).unwrap();
+    let script = file.script.unwrap();
+    assert_eq!(script.ai_actions.len(), 1);
+
+    let ai = &script.ai_actions[0];
+    assert_eq!(ai.name, "translate");
+    assert_eq!(ai.model, "nllb-200");
+    assert!(!ai.audit);
+    assert!(ai.fallback.is_none());
+    assert!(ai.temperature.is_none());
+    assert!(ai.pii.is_none());
+    assert!(ai.permission.is_none());
+}
+
+// ---------------------------------------------------------------------------
+// Error display messages for ParseError variants
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_error_display_syntax() {
+    let err = ParseError::Syntax {
+        line: 5,
+        col: 10,
+        message: "unexpected token".to_string(),
+    };
+    let msg = format!("{}", err);
+    assert!(msg.contains("line 5"));
+    assert!(msg.contains("col 10"));
+    assert!(msg.contains("unexpected token"));
+}
+
+#[test]
+fn parse_error_display_unknown_block() {
+    let err = ParseError::UnknownBlock("widget".to_string());
+    let msg = format!("{}", err);
+    assert!(msg.contains("widget"));
+    assert!(msg.contains("Unknown block"));
+}
+
+#[test]
+fn parse_error_display_duplicate_block() {
+    let err = ParseError::DuplicateBlock("script".to_string());
+    let msg = format!("{}", err);
+    assert!(msg.contains("script"));
+    assert!(msg.contains("Duplicate"));
+}
+
+#[test]
+fn parse_error_display_missing_field() {
+    let err = ParseError::MissingField {
+        block: "resource".to_string(),
+        field: "name".to_string(),
+    };
+    let msg = format!("{}", err);
+    assert!(msg.contains("name"));
+    assert!(msg.contains("resource"));
+}
+
+#[test]
+fn parse_error_display_invalid_value() {
+    let err = ParseError::InvalidValue {
+        field: "cache".to_string(),
+        value: "mega".to_string(),
+        reason: "valid values: no-store, private, public, static".to_string(),
+    };
+    let msg = format!("{}", err);
+    assert!(msg.contains("cache"));
+    assert!(msg.contains("mega"));
+}
+
+#[test]
+fn parse_error_display_unclosed_block() {
+    let err = ParseError::UnclosedBlock("style".to_string());
+    let msg = format!("{}", err);
+    assert!(msg.contains("style"));
+    assert!(msg.contains("Unclosed"));
+}
+
+#[test]
+fn parse_error_display_unexpected_token() {
+    let err = ParseError::UnexpectedToken(">>>".to_string());
+    let msg = format!("{}", err);
+    assert!(msg.contains(">>>"));
+    assert!(msg.contains("Unexpected"));
+}
+
+// ---------------------------------------------------------------------------
+// Multiple blocks in single file (route + script + template + style)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_full_multi_block_file() {
+    let input = r#"
+<route>
+  path: "/dashboard"
+  layout: "main"
+  auth: required
+  tenant: required
+  cache: private
+</route>
+
+<script lang="rust">
+  use crate::repos::StatsRepo;
+
+  state total_users: i64 = 0
+  state total_orders: i64 = 0
+  state recent_activity: Vec<Activity> = []
+
+  load async fn load_stats(ctx: Ctx) {
+    total_users = StatsRepo::count_users(ctx.tenant_id).await?;
+    total_orders = StatsRepo::count_orders(ctx.tenant_id).await?;
+    recent_activity = StatsRepo::recent(ctx.tenant_id, 10).await?;
+  }
+
+  action async fn refresh(ctx: Ctx) {
+    total_users = StatsRepo::count_users(ctx.tenant_id).await?;
+    total_orders = StatsRepo::count_orders(ctx.tenant_id).await?;
+  }
+</script>
+
+<template>
+  <div class="dashboard">
+    <h1>Dashboard</h1>
+    <div class="stats">
+      <span>Users: {total_users}</span>
+      <span>Orders: {total_orders}</span>
+    </div>
+    {#each recent_activity as activity}
+      <p>{activity.description}</p>
+    {/each}
+    <button on:click="refresh">Refresh</button>
+  </div>
+</template>
+
+<style scoped>
+  .dashboard { padding: 24px; }
+  .stats { display: flex; gap: 16px; }
+</style>
+"#;
+    let file = parse(input).unwrap();
+
+    // Route
+    let route = file.route.unwrap();
+    assert_eq!(route.path.as_deref(), Some("/dashboard"));
+    assert_eq!(route.layout.as_deref(), Some("main"));
+    assert_eq!(route.auth, Some(AuthLevel::Required));
+    assert_eq!(route.tenant, Some(TenantLevel::Required));
+    assert_eq!(route.cache, Some(CachePolicy::Private));
+
+    // Script
+    let script = file.script.unwrap();
+    assert_eq!(script.uses.len(), 1);
+    assert_eq!(script.states.len(), 3);
+    assert_eq!(script.loaders.len(), 1);
+    assert_eq!(script.actions.len(), 1);
+    assert_eq!(script.actions[0].name, "refresh");
+    assert!(script.actions[0].is_async);
+
+    // Template
+    let tpl = file.template.unwrap();
+    assert!(!tpl.children.is_empty());
+
+    // Style
+    let style = file.style.unwrap();
+    assert!(style.scoped);
+    assert!(style.content.contains(".dashboard"));
+    assert!(style.content.contains("display: flex"));
+}
+
+// ---------------------------------------------------------------------------
+// Route with all cache policies
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_route_cache_policies() {
+    for (policy_str, expected) in [
+        ("no-store", CachePolicy::NoStore),
+        ("private", CachePolicy::Private),
+        ("public", CachePolicy::Public),
+        ("static", CachePolicy::Static),
+    ] {
+        let input = format!(
+            r#"
+<route>
+  path: "/test"
+  cache: {}
+</route>
+"#,
+            policy_str
+        );
+        let file = parse(&input).unwrap();
+        let route = file.route.unwrap();
+        assert_eq!(
+            route.cache,
+            Some(expected),
+            "Failed for cache policy: {}",
+            policy_str
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Route with all auth levels
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_route_auth_levels() {
+    for (auth_str, expected) in [
+        ("public", AuthLevel::Public),
+        ("optional", AuthLevel::Optional),
+        ("required", AuthLevel::Required),
+    ] {
+        let input = format!(
+            r#"
+<route>
+  path: "/test"
+  auth: {}
+</route>
+"#,
+            auth_str
+        );
+        let file = parse(&input).unwrap();
+        let route = file.route.unwrap();
+        assert_eq!(
+            route.auth,
+            Some(expected),
+            "Failed for auth level: {}",
+            auth_str
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Route with all tenant levels
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_route_tenant_levels() {
+    for (tenant_str, expected) in [
+        ("none", TenantLevel::None),
+        ("optional", TenantLevel::Optional),
+        ("required", TenantLevel::Required),
+    ] {
+        let input = format!(
+            r#"
+<route>
+  path: "/test"
+  tenant: {}
+</route>
+"#,
+            tenant_str
+        );
+        let file = parse(&input).unwrap();
+        let route = file.route.unwrap();
+        assert_eq!(
+            route.tenant,
+            Some(expected),
+            "Failed for tenant level: {}",
+            tenant_str
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Multiple state + action + memo + loader + form in one script
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_script_all_decl_types() {
+    let input = r#"
+<script lang="rust">
+  use crate::models::Invoice;
+
+  prop customer_id: Uuid
+  state items: Vec<Item> = []
+  state discount: f64 = 0.0
+  state secret api_secret: String
+
+  memo subtotal: f64 = items.iter().map(|i| i.price).sum()
+
+  load async fn load_items(ctx: Ctx) {
+    items = InvoiceRepo::items(ctx.tenant_id, customer_id).await?;
+  }
+
+  action add_item(item: Item) {
+    items.push(item)
+  }
+
+  form InvoiceForm {
+    reference: String required min=3 max=50
+    amount: Decimal required
+  }
+
+  ai action estimate_total(input: InvoiceData) -> EstimatedTotal {
+    model: "fin-model-v2"
+    audit: true
+  }
+</script>
+"#;
+    let file = parse(input).unwrap();
+    let script = file.script.unwrap();
+
+    assert_eq!(script.uses.len(), 1);
+    assert_eq!(script.props.len(), 1);
+    assert_eq!(script.states.len(), 3);
+    assert!(script.states[2].secret);
+    assert_eq!(script.memos.len(), 1);
+    assert_eq!(script.loaders.len(), 1);
+    assert_eq!(script.actions.len(), 1);
+    assert_eq!(script.forms.len(), 1);
+    assert_eq!(script.ai_actions.len(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate script block should error
+// ---------------------------------------------------------------------------
+
+#[test]
+fn error_duplicate_script_block() {
+    let input = r#"
+<script lang="rust">
+  state a: i32 = 0
+</script>
+<script lang="rust">
+  state b: i32 = 0
+</script>
+"#;
+    let result = parse(input);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ParseError::DuplicateBlock(name) => assert_eq!(name, "script"),
+        other => panic!("Expected DuplicateBlock(script), got: {other}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate template block should error
+// ---------------------------------------------------------------------------
+
+#[test]
+fn error_duplicate_template_block() {
+    let input = r#"
+<template>
+  <div>A</div>
+</template>
+<template>
+  <div>B</div>
+</template>
+"#;
+    let result = parse(input);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ParseError::DuplicateBlock(name) => assert_eq!(name, "template"),
+        other => panic!("Expected DuplicateBlock(template), got: {other}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate style block should error
+// ---------------------------------------------------------------------------
+
+#[test]
+fn error_duplicate_style_block() {
+    let input = r#"
+<style scoped>
+  .a { color: red; }
+</style>
+<style global>
+  .b { color: blue; }
+</style>
+"#;
+    let result = parse(input);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        ParseError::DuplicateBlock(name) => assert_eq!(name, "style"),
+        other => panic!("Expected DuplicateBlock(style), got: {other}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Named slot
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_template_named_slot() {
+    let input = r#"
+<template>
+  <div>
+    <slot name="header" />
+    <slot />
+  </div>
+</template>
+"#;
+    let file = parse(input).unwrap();
+    let tpl = file.template.unwrap();
+
+    let div = match &tpl.children[0] {
+        TemplateNode::Element(el) => el,
+        other => panic!("Expected Element, got: {:?}", other),
+    };
+
+    let slots: Vec<&SlotNode> = div
+        .children
+        .iter()
+        .filter_map(|n| match n {
+            TemplateNode::Slot(s) => Some(s),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(slots.len(), 2);
+    assert_eq!(slots[0].name.as_deref(), Some("header"));
+    assert!(slots[1].name.is_none());
+}

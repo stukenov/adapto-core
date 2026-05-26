@@ -13,3 +13,7 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+
+[[bench]]
+name = "benchmark"
+harness = false

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.2] - 2026-05-27
+
+### Added
+
+#### Tests — 525 new tests across 13 WIP crates (843 total workspace)
+- **adapto_runtime** — 42 tests: StateStore CRUD/dirty/merge, PermissionSet logic, Ctx auth/tenant/permissions, Config serde roundtrip, RuntimeError display, type conversions/equality/hashing. (`runtime_tests.rs`)
+- **adapto_auth** — 49 tests: CSRF generate/validate/expired/tampered, session tokens sign/verify/tampered, RBAC define/assign/revoke/multi-role, rate limiter within/exceed/independent keys. (`auth_tests.rs`)
+- **adapto_audit** — 15 tests: AuditEvent creation/metadata/status, InMemory/Channel/Log sinks, serialization. (`audit_tests.rs`)
+- **adapto_forms** — 37 tests: schema builder, all field types (String/Email/Integer/Decimal/Boolean/UUID/DateTime/Enum), constraints (min/max length, required, pattern), edge cases. (`form_tests.rs`)
+- **adapto_db** — 38 tests: Query builder eq/ne/gt/lt/like/in/null/AND/OR with parameterized SQL, InMemoryRepository CRUD/tenant isolation/search/count, Migration create_table SQL. (`db_tests.rs`)
+- **adapto_ai** — 41 tests: PiiRedactor email/phone/SSN/CC/custom patterns, BudgetTracker set/check/record/exceed/reset, ModelRouter add/resolve/default/fallback/cost, TraceCollector, TokenUsage Add trait. (`ai_tests.rs`)
+- **adapto_parser** — 74 tests: all DSL blocks (route/script/template/style/resource), error recovery, edge cases, multi-block files, AI action parsing. (`parse_tests.rs`)
+- **adapto_compiler** — 59 tests: IR generation, codegen output, DependencyGraph construction/lookup, RouteManifest/ComponentManifest, CompileError display, full pipeline with if/each/can. (`compiler_tests.rs`)
+- **adapto_ssr** — 39 tests: Renderer static/dynamic/events, page wrapping with bootstrap/styles, Router exact/dynamic/nested matching, PageRenderer auth/tenant/permissions, Layout register/compose, 5 end-to-end integration tests (parse→compile→render). (`ssr_tests.rs`)
+- **adapto_live** — 38 tests: SessionManager add/count/has/remove/cleanup_expired/max sessions, PatchGenerator, event validation. (`live_tests.rs`)
+- **adapto_cli** — 23 tests: clap parsing, all command variants (new/dev/build/check/generate), CliError display. (`cli_tests.rs`)
+- **adapto_macros** — 8 tests: derive Resource expansion, field names, collection name, route prefix. (`macros_tests.rs`)
+- **adapto_test_utils** — 42 tests: all builders (Event/Form/Patch/State), fixture functions, MockAuditSink, MockClock. (`test_utils_tests.rs`)
+
+#### Benchmarks — 4 benchmark suites with custom harness
+- **adapto_store** — insert (100–100K), find_by_id, query eq/range/complex, update, delete, indexed vs scan (365x speedup), bulk_insert, sort, WAL persistence/replay/compact, concurrent writes same/different collections, concurrent read+write mix. (`benches/benchmark.rs`)
+- **adapto_parser** — parse minimal/counter/full-page/resource, throughput measurement (~75 MB/s). (`benches/benchmark.rs`)
+- **adapto_compiler** — compile minimal/counter/full-page, dependency graph lookup, codegen size analysis, throughput (~106 MB/s). (`benches/benchmark.rs`)
+- **adapto_ssr** — render_component minimal/counter/full-page, render_page with layout, render throughput (~224 MB/s), full pipeline parse→compile→render (~64K ops/sec). (`benches/benchmark.rs`)
+
 ## [0.2.1] - 2026-05-27
 
 ### Added

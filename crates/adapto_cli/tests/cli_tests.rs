@@ -228,3 +228,92 @@ fn find_adapto_files_recursive() {
         assert!(f.ends_with(".adapto"), "unexpected file: {f}");
     }
 }
+
+// ── Additional Clap parsing tests ──────────────────────────────────────────
+
+#[test]
+fn parse_dev_custom_host() {
+    let cli = parse(&["adapto", "dev", "--host", "0.0.0.0", "--port", "9090"]);
+    match cli.command {
+        Commands::Dev { port, host } => {
+            assert_eq!(port, 9090);
+            assert_eq!(host, "0.0.0.0");
+        }
+        other => panic!("expected Dev, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_unknown_command_fails() {
+    let result = Cli::try_parse_from(&["adapto", "deploy"]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn parse_new_requires_name() {
+    let result = Cli::try_parse_from(&["adapto", "new"]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn parse_generate_resource_requires_name() {
+    let result = Cli::try_parse_from(&["adapto", "generate", "resource"]);
+    assert!(result.is_err());
+}
+
+// ── Error display tests ────────────────────────────────────────────────────
+
+use adapto_cli::error::CliError;
+
+#[test]
+fn error_display_io() {
+    let err = CliError::IoError("disk full".to_string());
+    assert_eq!(err.to_string(), "IO error: disk full");
+}
+
+#[test]
+fn error_display_compile() {
+    let err = CliError::CompileError("syntax at line 5".to_string());
+    assert_eq!(err.to_string(), "Compile error: syntax at line 5");
+}
+
+#[test]
+fn error_display_check_failed() {
+    let err = CliError::CheckFailed(3);
+    assert_eq!(err.to_string(), "Check failed with 3 error(s)");
+}
+
+#[test]
+fn error_display_config() {
+    let err = CliError::ConfigError("missing key".to_string());
+    assert_eq!(err.to_string(), "Config error: missing key");
+}
+
+#[test]
+fn error_display_not_a_project() {
+    let err = CliError::NotAProject;
+    assert_eq!(
+        err.to_string(),
+        "Not an Adapto project (adapto.toml not found)"
+    );
+}
+
+// ── Command variant exhaustiveness ─────────────────────────────────────────
+
+#[test]
+fn all_commands_parse() {
+    let cases: Vec<(&[&str], &str)> = vec![
+        (&["adapto", "new", "x"], "New"),
+        (&["adapto", "dev"], "Dev"),
+        (&["adapto", "build"], "Build"),
+        (&["adapto", "check"], "Check"),
+        (&["adapto", "generate", "resource", "Foo"], "Generate"),
+        (&["adapto", "routes"], "Routes"),
+        (&["adapto", "doctor"], "Doctor"),
+    ];
+
+    for (args, label) in cases {
+        let cli = Cli::try_parse_from(args);
+        assert!(cli.is_ok(), "Failed to parse {label}: {:?}", cli.err());
+    }
+}

@@ -698,3 +698,207 @@ fn test_manager_cleanup_expired() {
     assert!(manager.has(&SessionId::from("s_new")));
     assert!(!manager.has(&SessionId::from("s_old")));
 }
+
+// ===========================================================================
+// 26. SessionManager: add anonymous sessions bypass user limit
+// ===========================================================================
+
+#[test]
+fn test_manager_anonymous_sessions_bypass_limit() {
+    let manager = SessionManager::new(1);
+
+    let s1 = LiveSession::new(
+        SessionId::from("anon_1"),
+        None,
+        None,
+        RouteId::from("/a"),
+        make_ir(),
+        make_dep_graph(),
+        PermissionSet::new(),
+    );
+    let s2 = LiveSession::new(
+        SessionId::from("anon_2"),
+        None,
+        None,
+        RouteId::from("/b"),
+        make_ir(),
+        make_dep_graph(),
+        PermissionSet::new(),
+    );
+
+    manager.add(s1).unwrap();
+    manager.add(s2).unwrap();
+    assert_eq!(manager.count(), 2);
+}
+
+// ===========================================================================
+// 27. SessionManager: count_for_user returns 0 for unknown user
+// ===========================================================================
+
+#[test]
+fn test_manager_count_for_unknown_user() {
+    let manager = SessionManager::new(10);
+    manager.add(make_session()).unwrap();
+    let unknown = UserId(uuid::Uuid::new_v4());
+    assert_eq!(manager.count_for_user(&unknown), 0);
+}
+
+// ===========================================================================
+// 28. SessionManager: remove nonexistent returns None
+// ===========================================================================
+
+#[test]
+fn test_manager_remove_nonexistent() {
+    let manager = SessionManager::new(10);
+    assert!(manager.remove(&SessionId::from("ghost")).is_none());
+}
+
+// ===========================================================================
+// 29. SessionManager: cleanup_expired with no expired sessions
+// ===========================================================================
+
+#[test]
+fn test_manager_cleanup_none_expired() {
+    let manager = SessionManager::new(10);
+    manager.add(make_session()).unwrap();
+    let removed = manager.cleanup_expired(std::time::Duration::from_secs(3600));
+    assert_eq!(removed, 0);
+    assert_eq!(manager.count(), 1);
+}
+
+// ===========================================================================
+// 30. Event validation: valid client event passes
+// ===========================================================================
+
+#[test]
+fn test_validate_client_event_valid() {
+    let event = make_client_event("do_stuff");
+    assert!(validate_client_event(&event).is_ok());
+}
+
+// ===========================================================================
+// 31. Event validation: empty component still passes
+// ===========================================================================
+
+#[test]
+fn test_validate_event_empty_component_passes() {
+    let event = ClientEvent {
+        session: "s".to_string(),
+        component: String::new(),
+        event: "click".to_string(),
+        handler: "h".to_string(),
+        payload: HashMap::new(),
+        seq: 1,
+    };
+    assert!(validate_client_event(&event).is_ok());
+}
+
+// ===========================================================================
+// 32. extract_action_args: empty payload returns empty object
+// ===========================================================================
+
+#[test]
+fn test_extract_action_args_empty() {
+    use adapto_live::event::extract_action_args;
+    let event = make_client_event("handler");
+    let args = extract_action_args(&event);
+    assert!(args.is_object());
+    assert_eq!(args.as_object().unwrap().len(), 0);
+}
+
+// ===========================================================================
+// 33. extract_action_args: with payload fields
+// ===========================================================================
+
+#[test]
+fn test_extract_action_args_with_fields() {
+    use adapto_live::event::extract_action_args;
+    let mut event = make_client_event("handler");
+    event.payload.insert("idx".to_string(), serde_json::json!(5));
+    event.payload.insert("name".to_string(), serde_json::json!("Alice"));
+
+    let args = extract_action_args(&event);
+    let obj = args.as_object().unwrap();
+    assert_eq!(obj.get("idx"), Some(&serde_json::json!(5)));
+    assert_eq!(obj.get("name"), Some(&serde_json::json!("Alice")));
+}
+
+// ===========================================================================
+// 34. PatchGenerator: attribute segment type
+// ===========================================================================
+
+#[test]
+fn test_patch_generator_attribute_segment() {
+    let mut state = StateStore::new();
+    state.set("color", serde_json::json!("red"));
+
+    let mut dep_graph = DependencyGraph::new();
+    dep_graph.add_dependency("dyn_attr", "color");
+
+    let segments = vec![DynamicSegment {
+        id: "dyn_attr".to_string(),
+        expr: "color".to_string(),
+        deps: vec!["color".to_string()],
+        segment_type: SegmentType::Attribute {
+            element_id: "el_1".to_string(),
+            attr_name: "style".to_string(),
+        },
+    }];
+
+    let ops = PatchGenerator::generate(&state, &dep_graph, &segments);
+    assert_eq!(ops.len(), 1);
+    match &ops[0] {
+        PatchOp::SetAttr { target, name, value } => {
+            assert_eq!(target, "el_1");
+            assert_eq!(name, "style");
+            assert_eq!(value, "red");
+        }
+        other => panic!("Expected SetAttr, got: {:?}", other),
+    }
+}
+
+// ===========================================================================
+// 35. PatchGenerator: html segment type
+// ===========================================================================
+
+#[test]
+fn test_patch_generator_html_segment() {
+    let mut state = StateStore::new();
+    state.set("content", serde_json::json!("<b>bold</b>"));
+
+    let mut dep_graph = DependencyGraph::new();
+    dep_graph.add_dependency("dyn_html", "content");
+
+    let segments = vec![DynamicSegment {
+        id: "dyn_html".to_string(),
+        expr: "content".to_string(),
+        deps: vec!["content".to_string()],
+        segment_type: SegmentType::Html,
+    }];
+
+    let ops = PatchGenerator::generate(&state, &dep_graph, &segments);
+    assert_eq!(ops.len(), 1);
+    match &ops[0] {
+        PatchOp::ReplaceHtml { target, html } => {
+            assert_eq!(target, "dyn_html");
+            assert_eq!(html, "<b>bold</b>");
+        }
+        other => panic!("Expected ReplaceHtml, got: {:?}", other),
+    }
+}
+
+// ===========================================================================
+// 36. Form validation: empty component still passes
+// ===========================================================================
+
+#[test]
+fn test_validate_form_event_empty_component_passes() {
+    let event = FormSubmitEvent {
+        session: "s".to_string(),
+        component: String::new(),
+        handler: "submit".to_string(),
+        form: HashMap::new(),
+        seq: 1,
+    };
+    assert!(validate_form_event(&event).is_ok());
+}

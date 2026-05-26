@@ -1,3 +1,4 @@
+use adapto_audit::error::AuditError;
 use adapto_audit::event::{AuditEvent, AuditStatus};
 use adapto_audit::sink::{AuditSink, ChannelAuditSink, InMemoryAuditSink, LogAuditSink};
 use adapto_runtime::context::{Ctx, PermissionSet};
@@ -171,4 +172,58 @@ fn multiple_audit_events_ordering() {
     assert_eq!(events[0].event, "first");
     assert_eq!(events[1].event, "second");
     assert_eq!(events[2].event, "third");
+}
+
+// ---------------------------------------------------------------------------
+// InMemoryAuditSink — Default trait
+// ---------------------------------------------------------------------------
+
+#[test]
+fn in_memory_sink_default() {
+    let sink = InMemoryAuditSink::default();
+    assert!(sink.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// ChannelAuditSink — dropped receiver
+// ---------------------------------------------------------------------------
+
+#[test]
+fn channel_sink_write_after_receiver_dropped_does_not_panic() {
+    let (sink, rx) = ChannelAuditSink::new();
+    drop(rx);
+
+    let ctx = make_ctx();
+    // Should silently discard, not panic.
+    sink.write(AuditEvent::new("dropped.rx", &ctx, "noop"));
+}
+
+// ---------------------------------------------------------------------------
+// AuditError
+// ---------------------------------------------------------------------------
+
+#[test]
+fn audit_error_write_error_display() {
+    let err = AuditError::WriteError("disk full".to_string());
+    assert_eq!(err.to_string(), "Failed to write audit event: disk full");
+}
+
+#[test]
+fn audit_error_channel_closed_display() {
+    let err = AuditError::ChannelClosed;
+    assert_eq!(err.to_string(), "Audit channel closed");
+}
+
+// ---------------------------------------------------------------------------
+// AuditStatus — Debug output
+// ---------------------------------------------------------------------------
+
+#[test]
+fn audit_status_debug() {
+    assert_eq!(format!("{:?}", AuditStatus::Success), "Success");
+    assert_eq!(
+        format!("{:?}", AuditStatus::Failure("oops".to_string())),
+        "Failure(\"oops\")"
+    );
+    assert_eq!(format!("{:?}", AuditStatus::Denied), "Denied");
 }

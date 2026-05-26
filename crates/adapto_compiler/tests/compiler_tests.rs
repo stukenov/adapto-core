@@ -1281,3 +1281,799 @@ fn test_interleave_ordering() {
     assert!(ir.static_segments[1].starts_with("</p>"),
         "Second static segment should start with '</p>', got: {:?}", ir.static_segments[1]);
 }
+
+// ===========================================================================
+// Extended test suite
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// DependencyGraph: add_dependency bidirectional consistency
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_dependency_graph_add_dependency_bidirectional() {
+    let mut graph = DependencyGraph::new();
+    graph.add_dependency("dyn_0", "username");
+    graph.add_dependency("dyn_0", "email");
+    graph.add_dependency("dyn_1", "username");
+
+    // Forward: state -> segments
+    let affected = graph.get_affected_segments(&["username"]);
+    assert_eq!(affected.len(), 2);
+    assert!(affected.contains("dyn_0"));
+    assert!(affected.contains("dyn_1"));
+
+    // Reverse: segment -> deps
+    let deps_0 = graph.get_deps_for_segment("dyn_0");
+    assert_eq!(deps_0.len(), 2);
+    assert!(deps_0.contains("username"));
+    assert!(deps_0.contains("email"));
+
+    let deps_1 = graph.get_deps_for_segment("dyn_1");
+    assert_eq!(deps_1.len(), 1);
+    assert!(deps_1.contains("username"));
+}
+
+// ---------------------------------------------------------------------------
+// DependencyGraph: validate with all known fields passes
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_dependency_graph_validate_all_known() {
+    let mut graph = DependencyGraph::new();
+    graph.add_dependency("dyn_0", "a");
+    graph.add_dependency("dyn_1", "b");
+    graph.add_dependency("dyn_2", "c");
+
+    let unknown = graph.validate(&["a", "b", "c"]);
+    assert!(unknown.is_empty(), "All fields known, should be empty: {:?}", unknown);
+}
+
+// ---------------------------------------------------------------------------
+// DependencyGraph: validate detects multiple unknowns (sorted)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_dependency_graph_validate_multiple_unknowns() {
+    let mut graph = DependencyGraph::new();
+    graph.add_dependency("dyn_0", "known");
+    graph.add_dependency("dyn_1", "unknown_b");
+    graph.add_dependency("dyn_2", "unknown_a");
+
+    let unknown = graph.validate(&["known"]);
+    assert_eq!(unknown.len(), 2);
+    // Should be sorted
+    assert_eq!(unknown[0], "unknown_a");
+    assert_eq!(unknown[1], "unknown_b");
+}
+
+// ---------------------------------------------------------------------------
+// DependencyGraph: all_state_fields and all_segments
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_dependency_graph_all_state_fields_and_segments() {
+    let mut graph = DependencyGraph::new();
+    graph.add_dependency("seg_a", "field_x");
+    graph.add_dependency("seg_b", "field_y");
+    graph.add_dependency("seg_c", "field_x");
+
+    let fields = graph.all_state_fields();
+    assert_eq!(fields.len(), 2);
+    assert!(fields.contains("field_x"));
+    assert!(fields.contains("field_y"));
+
+    let segments = graph.all_segments();
+    assert_eq!(segments.len(), 3);
+    assert!(segments.contains("seg_a"));
+    assert!(segments.contains("seg_b"));
+    assert!(segments.contains("seg_c"));
+}
+
+// ---------------------------------------------------------------------------
+// DependencyGraph: empty graph edge cases
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_dependency_graph_empty() {
+    let graph = DependencyGraph::new();
+
+    assert!(graph.all_state_fields().is_empty());
+    assert!(graph.all_segments().is_empty());
+    assert!(graph.get_affected_segments(&["anything"]).is_empty());
+    assert!(graph.get_deps_for_segment("dyn_0").is_empty());
+    assert!(graph.validate(&[]).is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// RouteManifest: add, find_by_path, to_json
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_route_manifest_comprehensive() {
+    let mut manifest = RouteManifest::new();
+    assert!(manifest.routes.is_empty());
+
+    manifest.add(RouteEntry {
+        id: "r1".to_string(),
+        path: "/api/users".to_string(),
+        file: "pages/users.adapto".to_string(),
+        method: "GET".to_string(),
+        auth: "required".to_string(),
+        tenant: "required".to_string(),
+        permission: Some("users.list".to_string()),
+        layout: Some("admin".to_string()),
+        cache: "no-store".to_string(),
+    });
+
+    manifest.add(RouteEntry {
+        id: "r2".to_string(),
+        path: "/api/users/:id".to_string(),
+        file: "pages/user_detail.adapto".to_string(),
+        method: "GET".to_string(),
+        auth: "required".to_string(),
+        tenant: "required".to_string(),
+        permission: Some("users.read".to_string()),
+        layout: Some("admin".to_string()),
+        cache: "private".to_string(),
+    });
+
+    manifest.add(RouteEntry {
+        id: "r3".to_string(),
+        path: "/public/health".to_string(),
+        file: "pages/health.adapto".to_string(),
+        method: "GET".to_string(),
+        auth: "public".to_string(),
+        tenant: "none".to_string(),
+        permission: None,
+        layout: None,
+        cache: "public".to_string(),
+    });
+
+    assert_eq!(manifest.routes.len(), 3);
+
+    // find_by_path
+    let found = manifest.find_by_path("/api/users");
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().id, "r1");
+    assert_eq!(found.unwrap().permission.as_deref(), Some("users.list"));
+
+    let found2 = manifest.find_by_path("/api/users/:id");
+    assert!(found2.is_some());
+    assert_eq!(found2.unwrap().id, "r2");
+
+    let found3 = manifest.find_by_path("/public/health");
+    assert!(found3.is_some());
+    assert!(found3.unwrap().permission.is_none());
+
+    // Not found
+    assert!(manifest.find_by_path("/nonexistent").is_none());
+
+    // to_json
+    let json = manifest.to_json();
+    assert!(json.contains("/api/users"));
+    assert!(json.contains("/api/users/:id"));
+    assert!(json.contains("/public/health"));
+    assert!(json.contains("users.list"));
+    assert!(json.contains("\"method\": \"GET\""));
+}
+
+// ---------------------------------------------------------------------------
+// ComponentManifest: add, find_by_name, to_json
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_component_manifest_comprehensive() {
+    let mut manifest = ComponentManifest::new();
+    assert!(manifest.components.is_empty());
+
+    manifest.add(ComponentEntry {
+        id: "comp_sidebar".to_string(),
+        name: "Sidebar".to_string(),
+        file: "components/sidebar.adapto".to_string(),
+        is_island: false,
+        dependencies: vec!["menu_items".to_string()],
+    });
+
+    manifest.add(ComponentEntry {
+        id: "comp_chart".to_string(),
+        name: "Chart".to_string(),
+        file: "components/chart.adapto".to_string(),
+        is_island: true,
+        dependencies: vec!["data".to_string(), "options".to_string()],
+    });
+
+    manifest.add(ComponentEntry {
+        id: "comp_footer".to_string(),
+        name: "Footer".to_string(),
+        file: "components/footer.adapto".to_string(),
+        is_island: false,
+        dependencies: vec![],
+    });
+
+    assert_eq!(manifest.components.len(), 3);
+
+    // find_by_name
+    let sidebar = manifest.find_by_name("Sidebar");
+    assert!(sidebar.is_some());
+    assert_eq!(sidebar.unwrap().id, "comp_sidebar");
+    assert!(!sidebar.unwrap().is_island);
+
+    let chart = manifest.find_by_name("Chart");
+    assert!(chart.is_some());
+    assert!(chart.unwrap().is_island);
+    assert_eq!(chart.unwrap().dependencies.len(), 2);
+
+    let footer = manifest.find_by_name("Footer");
+    assert!(footer.is_some());
+    assert!(footer.unwrap().dependencies.is_empty());
+
+    // Not found
+    assert!(manifest.find_by_name("NotExists").is_none());
+
+    // to_json
+    let json = manifest.to_json();
+    assert!(json.contains("Sidebar"));
+    assert!(json.contains("Chart"));
+    assert!(json.contains("Footer"));
+    assert!(json.contains("\"is_island\": true"));
+}
+
+// ---------------------------------------------------------------------------
+// CompileError display messages (additional variants)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_compile_error_display_unscoped_query() {
+    let err = CompileError::UnscopedQuery {
+        file: "tenant_page.adapto".to_string(),
+        line: 20,
+    };
+    let msg = format!("{}", err);
+    assert!(msg.contains("E0702"), "Should contain E0702, got: {}", msg);
+    assert!(msg.contains("unscoped"), "Should mention unscoped, got: {}", msg);
+}
+
+#[test]
+fn test_compile_error_display_unknown_component() {
+    let err = CompileError::UnknownComponent {
+        name: "MissingWidget".to_string(),
+    };
+    let msg = format!("{}", err);
+    assert!(msg.contains("E0301"));
+    assert!(msg.contains("MissingWidget"));
+}
+
+#[test]
+fn test_compile_error_display_missing_permission() {
+    let err = CompileError::MissingPermission {
+        action: "delete_all".to_string(),
+    };
+    let msg = format!("{}", err);
+    assert!(msg.contains("E0401"));
+    assert!(msg.contains("delete_all"));
+}
+
+#[test]
+fn test_compile_error_display_multiple() {
+    let err = CompileError::Multiple {
+        count: 5,
+        errors: vec![
+            CompileError::DuplicateState { name: "x".to_string() },
+            CompileError::DuplicateState { name: "y".to_string() },
+        ],
+    };
+    let msg = format!("{}", err);
+    assert_eq!(msg, "Compilation failed with 5 errors");
+}
+
+// ---------------------------------------------------------------------------
+// Codegen: generate_component produces valid Rust code structure
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_codegen_full_structure() {
+    let ir = ComponentIR {
+        id: "comp_profile".to_string(),
+        name: "Profile".to_string(),
+        route: None,
+        static_segments: vec![
+            "<div class=\"profile\">".to_string(),
+            "</div>".to_string(),
+        ],
+        dynamic_segments: vec![DynamicSegment {
+            id: "dyn_0".to_string(),
+            expr: "state.username".to_string(),
+            deps: vec!["username".to_string()],
+            segment_type: SegmentType::Text,
+        }],
+        events: vec![EventIR {
+            id: "evt_0".to_string(),
+            event_type: "click".to_string(),
+            handler: "save".to_string(),
+            component_id: "comp_profile".to_string(),
+            modifiers: vec![],
+            element_id: "el_button_0".to_string(),
+        }],
+        actions: vec![ActionIR {
+            name: "save".to_string(),
+            is_async: true,
+            params: vec![ParamIR {
+                name: "data".to_string(),
+                ty: "ProfileData".to_string(),
+            }],
+            permission: Some("profile.update".to_string()),
+            audit: Some("profile.saved".to_string()),
+            body: "repo.save(data).await;".to_string(),
+        }],
+        state_fields: vec![
+            StateFieldIR {
+                name: "username".to_string(),
+                ty: "String".to_string(),
+                default: Some("\"\"".to_string()),
+                secret: false,
+            },
+            StateFieldIR {
+                name: "bio".to_string(),
+                ty: "String".to_string(),
+                default: None,
+                secret: false,
+            },
+        ],
+        form_schemas: vec![],
+        permissions: vec!["profile.update".to_string()],
+        children: vec![],
+        is_island: false,
+        style: None,
+    };
+
+    let mut gen = CodeGenerator::new();
+    let code = gen.generate_component(&ir);
+
+    // State struct
+    assert!(code.contains("pub struct ProfileState"), "Missing state struct");
+    assert!(code.contains("pub username: String"), "Missing username field");
+    assert!(code.contains("pub bio: String"), "Missing bio field");
+
+    // Component impl
+    assert!(code.contains("impl Component for Profile"), "Missing Component impl");
+    assert!(code.contains("type State = ProfileState;"), "Missing State type");
+
+    // render function
+    assert!(code.contains("fn render(&self, state: &Self::State) -> Rendered"), "Missing render fn");
+    assert!(code.contains("static_part"), "Missing static_part call");
+    assert!(code.contains("dynamic_text"), "Missing dynamic_text call");
+    assert!(code.contains("dyn_0"), "Missing dyn_0 reference");
+
+    // handle_event function
+    assert!(code.contains("fn handle_event"), "Missing handle_event fn");
+    assert!(code.contains("\"save\""), "Missing save handler match");
+    assert!(code.contains("repo.save(data).await;"), "Missing action body");
+    assert!(code.contains("Err(Error::UnknownHandler)"), "Missing unknown handler fallback");
+}
+
+// ---------------------------------------------------------------------------
+// Codegen: component with no actions produces handle_event with only fallback
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_codegen_no_actions_handler() {
+    let ir = ComponentIR {
+        id: "comp_static".to_string(),
+        name: "StaticPage".to_string(),
+        route: None,
+        static_segments: vec!["<p>Hello</p>".to_string()],
+        dynamic_segments: vec![],
+        events: vec![],
+        actions: vec![],
+        state_fields: vec![],
+        form_schemas: vec![],
+        permissions: vec![],
+        children: vec![],
+        is_island: false,
+        style: None,
+    };
+
+    let mut gen = CodeGenerator::new();
+    let code = gen.generate_component(&ir);
+
+    assert!(code.contains("fn handle_event"));
+    assert!(code.contains("Err(Error::UnknownHandler)"));
+    // Should not contain any action match arms
+    assert!(!code.contains("Ok(())"), "No actions means no Ok(()) in handler");
+}
+
+// ---------------------------------------------------------------------------
+// Full compile pipeline: template with if/each/can blocks
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_compile_full_pipeline_if_each_can() {
+    let source = r#"
+<route>
+    path: "/orders"
+    auth: required
+    tenant: required
+    permission: "orders.read"
+</route>
+
+<script>
+    state orders: Vec<Order> = vec![]
+    state show_archived: bool = false
+    state filter: String = ""
+
+    load async fn load_orders(ctx: Ctx) {
+        orders = OrderRepo::list(ctx.tenant_id).await?;
+    }
+
+    action toggle_archived() {
+        state.show_archived = !state.show_archived;
+    }
+
+    #[permission("orders.delete")]
+    #[audit("order.deleted")]
+    action async fn delete_order(id: Uuid, ctx: Ctx) {
+        OrderRepo::delete(ctx.tenant_id, id).await?;
+    }
+</script>
+
+<template>
+    <div class="orders-page">
+        <h1>Orders</h1>
+
+        {#if show_archived}
+            <p>Showing archived orders</p>
+        {:else}
+            <p>Showing active orders</p>
+        {/if}
+
+        {#each orders as order}
+            <div class="order-row">
+                <span>{order.reference}</span>
+                <span>{order.total}</span>
+            </div>
+        {/each}
+
+        {#can "orders.create"}
+            <button>New Order</button>
+        {/can}
+
+        <button on:click="toggle_archived">Toggle Archived</button>
+    </div>
+</template>
+
+<style scoped>
+    .orders-page { padding: 24px; }
+    .order-row { display: flex; gap: 8px; }
+</style>
+"#;
+
+    let output = compile_source(source, "pages/orders.adapto");
+    let ir = &output.component_ir;
+
+    // Component name
+    assert_eq!(ir.name, "Orders");
+
+    // Route
+    let route = ir.route.as_ref().expect("Should have route");
+    assert_eq!(route.path, "/orders");
+    assert_eq!(route.auth, "required");
+    assert_eq!(route.tenant, "required");
+    assert_eq!(route.permission.as_deref(), Some("orders.read"));
+
+    // State fields
+    assert_eq!(ir.state_fields.len(), 3);
+    let field_names: Vec<&str> = ir.state_fields.iter().map(|f| f.name.as_str()).collect();
+    assert!(field_names.contains(&"orders"));
+    assert!(field_names.contains(&"show_archived"));
+    assert!(field_names.contains(&"filter"));
+
+    // Actions
+    assert_eq!(ir.actions.len(), 2);
+    let toggle = ir.actions.iter().find(|a| a.name == "toggle_archived").unwrap();
+    assert!(!toggle.is_async);
+    assert!(toggle.permission.is_none());
+
+    let delete = ir.actions.iter().find(|a| a.name == "delete_order").unwrap();
+    assert!(delete.is_async);
+    assert_eq!(delete.permission.as_deref(), Some("orders.delete"));
+    assert_eq!(delete.audit.as_deref(), Some("order.deleted"));
+
+    // Dynamic segments: should have conditional, loop, permission, and text segments
+    let conditionals: Vec<_> = ir.dynamic_segments.iter()
+        .filter(|s| matches!(s.segment_type, SegmentType::Conditional))
+        .collect();
+    assert!(!conditionals.is_empty(), "Should have conditional segments");
+
+    let loops: Vec<_> = ir.dynamic_segments.iter()
+        .filter(|s| matches!(s.segment_type, SegmentType::Loop))
+        .collect();
+    assert_eq!(loops.len(), 1, "Should have one loop segment");
+    assert_eq!(loops[0].expr, "orders");
+
+    let perms: Vec<_> = ir.dynamic_segments.iter()
+        .filter(|s| matches!(s.segment_type, SegmentType::Permission))
+        .collect();
+    assert_eq!(perms.len(), 1, "Should have one permission segment");
+    assert_eq!(perms[0].expr, "orders.create");
+
+    // Events
+    assert_eq!(ir.events.len(), 1);
+    assert_eq!(ir.events[0].event_type, "click");
+    assert_eq!(ir.events[0].handler, "toggle_archived");
+
+    // Permissions collected from route + actions
+    assert!(ir.permissions.contains(&"orders.delete".to_string()));
+    assert!(ir.permissions.contains(&"orders.read".to_string()));
+
+    // Style
+    let style = ir.style.as_ref().expect("Should have style");
+    assert!(style.scoped);
+    assert!(style.scope_id.is_some());
+    assert!(style.css.contains(".orders-page"));
+
+    // Dependency graph
+    let graph = &output.dependency_graph;
+    let all_fields = graph.all_state_fields();
+    assert!(all_fields.contains("show_archived"));
+    assert!(all_fields.contains("orders"));
+
+    let affected_by_orders = graph.get_affected_segments(&["orders"]);
+    assert!(!affected_by_orders.is_empty(), "Changing orders should affect segments");
+
+    // Generated Rust
+    assert!(output.generated_rust.contains("impl Component for Orders"));
+    assert!(output.generated_rust.contains("type State = OrdersState;"));
+    assert!(output.generated_rust.contains("fn render"));
+    assert!(output.generated_rust.contains("fn handle_event"));
+
+    // Route entry
+    let route_entry = output.route_entry.as_ref().expect("Should have route entry");
+    assert_eq!(route_entry.path, "/orders");
+    assert_eq!(route_entry.auth, "required");
+    assert_eq!(route_entry.tenant, "required");
+}
+
+// ---------------------------------------------------------------------------
+// Codegen: dynamic_cond, dynamic_loop, dynamic_perm in render
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_codegen_renders_all_segment_types() {
+    let ir = ComponentIR {
+        id: "comp_mixed".to_string(),
+        name: "Mixed".to_string(),
+        route: None,
+        static_segments: vec![
+            "<div>".to_string(),
+            "</div>".to_string(),
+            "<ul>".to_string(),
+            "</ul>".to_string(),
+        ],
+        dynamic_segments: vec![
+            DynamicSegment {
+                id: "dyn_0".to_string(),
+                expr: "show".to_string(),
+                deps: vec!["show".to_string()],
+                segment_type: SegmentType::Conditional,
+            },
+            DynamicSegment {
+                id: "dyn_1".to_string(),
+                expr: "items".to_string(),
+                deps: vec!["items".to_string()],
+                segment_type: SegmentType::Loop,
+            },
+            DynamicSegment {
+                id: "dyn_2".to_string(),
+                expr: "admin.delete".to_string(),
+                deps: vec!["permission:admin.delete".to_string()],
+                segment_type: SegmentType::Permission,
+            },
+            DynamicSegment {
+                id: "dyn_3".to_string(),
+                expr: "state.title".to_string(),
+                deps: vec!["title".to_string()],
+                segment_type: SegmentType::Text,
+            },
+        ],
+        events: vec![],
+        actions: vec![],
+        state_fields: vec![],
+        form_schemas: vec![],
+        permissions: vec![],
+        children: vec![],
+        is_island: false,
+        style: None,
+    };
+
+    let mut gen = CodeGenerator::new();
+    let code = gen.generate_component(&ir);
+
+    assert!(code.contains("dynamic_cond(\"dyn_0\""), "Missing conditional segment");
+    assert!(code.contains("dynamic_loop(\"dyn_1\""), "Missing loop segment");
+    assert!(code.contains("dynamic_perm(\"dyn_2\""), "Missing permission segment");
+    assert!(code.contains("dynamic_text(\"dyn_3\""), "Missing text segment");
+}
+
+// ---------------------------------------------------------------------------
+// Compiler accumulates manifests across multiple files
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_compiler_accumulates_three_files() {
+    let sources = vec![
+        (r#"
+<route>
+    path: "/a"
+    auth: public
+</route>
+<template><div>A</div></template>
+"#, "pages/a.adapto"),
+        (r#"
+<route>
+    path: "/b"
+    auth: required
+</route>
+<template><div>B</div></template>
+"#, "pages/b.adapto"),
+        (r#"
+<template><span>Widget</span></template>
+"#, "components/widget.adapto"),
+    ];
+
+    let mut compiler = Compiler::new();
+
+    for (src, path) in &sources {
+        let file = adapto_parser::parse(src).expect("parse failed");
+        compiler.compile_file(&file, path).expect("compile failed");
+    }
+
+    // Route manifest: 2 routes (widget has no route)
+    assert_eq!(compiler.route_manifest().routes.len(), 2);
+    assert!(compiler.route_manifest().find_by_path("/a").is_some());
+    assert!(compiler.route_manifest().find_by_path("/b").is_some());
+
+    // Component manifest: 3 components
+    assert_eq!(compiler.component_manifest().components.len(), 3);
+    assert!(compiler.component_manifest().find_by_name("A").is_some());
+    assert!(compiler.component_manifest().find_by_name("B").is_some());
+    assert!(compiler.component_manifest().find_by_name("Widget").is_some());
+}
+
+// ---------------------------------------------------------------------------
+// Component manifest JSON roundtrip
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_component_manifest_json_roundtrip() {
+    let mut manifest = ComponentManifest::new();
+    manifest.add(ComponentEntry {
+        id: "comp_btn".to_string(),
+        name: "Button".to_string(),
+        file: "components/button.adapto".to_string(),
+        is_island: false,
+        dependencies: vec!["label".to_string(), "disabled".to_string()],
+    });
+
+    let json = manifest.to_json();
+    let parsed: ComponentManifest = serde_json::from_str(&json).expect("should parse back");
+    assert_eq!(parsed.components.len(), 1);
+    assert_eq!(parsed.components[0].name, "Button");
+    assert_eq!(parsed.components[0].dependencies.len(), 2);
+}
+
+// ---------------------------------------------------------------------------
+// Codegen: form struct with validation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_codegen_form_with_all_constraints() {
+    let schema = FormSchemaIR {
+        name: "RegistrationForm".to_string(),
+        fields: vec![
+            FormFieldIR {
+                name: "name".to_string(),
+                ty: "String".to_string(),
+                required: true,
+                min: Some(2),
+                max: Some(100),
+            },
+            FormFieldIR {
+                name: "email".to_string(),
+                ty: "String".to_string(),
+                required: true,
+                min: None,
+                max: Some(255),
+            },
+            FormFieldIR {
+                name: "age".to_string(),
+                ty: "i32".to_string(),
+                required: false,
+                min: None,
+                max: None,
+            },
+        ],
+    };
+
+    let ir = ComponentIR {
+        id: "comp_reg".to_string(),
+        name: "Registration".to_string(),
+        route: None,
+        static_segments: vec![],
+        dynamic_segments: vec![],
+        events: vec![],
+        actions: vec![],
+        state_fields: vec![],
+        form_schemas: vec![schema],
+        permissions: vec![],
+        children: vec![],
+        is_island: false,
+        style: None,
+    };
+
+    let mut gen = CodeGenerator::new();
+    let code = gen.generate_component(&ir);
+
+    assert!(code.contains("pub struct RegistrationForm"));
+    assert!(code.contains("pub name: String"));
+    assert!(code.contains("pub email: String"));
+    assert!(code.contains("pub age: i32"));
+    assert!(code.contains("fn validate"));
+    // Should check required for name
+    assert!(code.contains("name is required") || code.contains("name"));
+    // Should check min/max for name
+    assert!(code.contains("at least 2") || code.contains("min"));
+    assert!(code.contains("at most 100") || code.contains("max"));
+}
+
+// ---------------------------------------------------------------------------
+// Compile: island component
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_compile_island_component() {
+    let source = r#"
+<template>
+    <div>
+        <Chart island data={sales} />
+    </div>
+</template>
+"#;
+
+    let output = compile_source(source, "pages/report.adapto");
+    let ir = &output.component_ir;
+
+    assert!(
+        ir.children.contains(&"Chart".to_string()),
+        "Should reference Chart child. Got: {:?}",
+        ir.children
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Compile: multiple events on same element
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_compile_multiple_events_same_element() {
+    let source = r#"
+<script>
+    action focus() { /* focus logic */ }
+    action blur() { /* blur logic */ }
+    action input_change() { /* input logic */ }
+</script>
+<template>
+    <input on:focus="focus" on:blur="blur" on:input="input_change" />
+</template>
+"#;
+
+    let output = compile_source(source, "multi_event.adapto");
+    let ir = &output.component_ir;
+
+    assert_eq!(ir.events.len(), 3, "Should have 3 events: {:?}", ir.events);
+
+    let event_types: Vec<&str> = ir.events.iter().map(|e| e.event_type.as_str()).collect();
+    assert!(event_types.contains(&"focus"));
+    assert!(event_types.contains(&"blur"));
+    assert!(event_types.contains(&"input"));
+}

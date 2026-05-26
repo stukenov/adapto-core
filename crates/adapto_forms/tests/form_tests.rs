@@ -1,4 +1,5 @@
-use adapto_forms::schema::{FieldSchema, FieldType, FormSchema};
+use adapto_forms::error::FormError;
+use adapto_forms::schema::{Constraint, FieldSchema, FieldType, FormSchema};
 use adapto_forms::validation::{validate_email, validate_field, ValidationResult};
 use serde_json::{json, Map, Value};
 
@@ -323,4 +324,248 @@ fn validate_customer_form() {
     assert!(!result.field_errors("email").is_empty());
     // phone is optional — no error expected.
     assert!(result.field_errors("phone").is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// 21. Pattern constraint — pass
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_pattern_contains_pass() {
+    let field = FieldSchema::new("code", FieldType::String).pattern("ABC");
+    let errors = validate_field(&field, Some(&json!("xyzABCdef")));
+    assert!(errors.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// 22. Pattern constraint — fail
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_pattern_contains_fail() {
+    let field = FieldSchema::new("code", FieldType::String).pattern("ABC");
+    let errors = validate_field(&field, Some(&json!("xyz")));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "pattern");
+}
+
+// ---------------------------------------------------------------------------
+// 23. Pattern constraint — anchored exact match
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_pattern_anchored_exact() {
+    let field = FieldSchema::new("code", FieldType::String).pattern("^hello$");
+    assert!(validate_field(&field, Some(&json!("hello"))).is_empty());
+    assert_eq!(validate_field(&field, Some(&json!("hello world"))).len(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// 24. Integer min/max constraints
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_integer_min_max() {
+    let field = FieldSchema::new("age", FieldType::Integer).min(0).max(150);
+
+    assert!(validate_field(&field, Some(&json!(25))).is_empty());
+    assert!(validate_field(&field, Some(&json!(0))).is_empty());
+    assert!(validate_field(&field, Some(&json!(150))).is_empty());
+
+    let errors = validate_field(&field, Some(&json!(-1)));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "min");
+
+    let errors = validate_field(&field, Some(&json!(151)));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "max");
+}
+
+// ---------------------------------------------------------------------------
+// 25. DateTime validation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_datetime_valid() {
+    let field = FieldSchema::new("created_at", FieldType::DateTime);
+    assert!(validate_field(&field, Some(&json!("2024-01-15T10:30:00Z"))).is_empty());
+    assert!(validate_field(&field, Some(&json!("2024-01-15T10:30:00+05:00"))).is_empty());
+}
+
+#[test]
+fn validate_datetime_invalid() {
+    let field = FieldSchema::new("created_at", FieldType::DateTime);
+    let errors = validate_field(&field, Some(&json!("not-a-date")));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "invalid_datetime");
+
+    let errors = validate_field(&field, Some(&json!(12345)));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "invalid_type");
+}
+
+// ---------------------------------------------------------------------------
+// 26. Required field with empty string
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_required_field_empty_string_passes_type_check() {
+    // Empty string is still a present string — passes required + type check.
+    // Use min_length constraint to reject empty strings.
+    let field = FieldSchema::new("name", FieldType::String).required();
+    let errors = validate_field(&field, Some(&json!("")));
+    assert!(errors.is_empty());
+}
+
+#[test]
+fn validate_required_field_empty_string_fails_min_length() {
+    let field = FieldSchema::new("name", FieldType::String).required().min_length(1);
+    let errors = validate_field(&field, Some(&json!("")));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "min_length");
+}
+
+// ---------------------------------------------------------------------------
+// 27. Required field with null value
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_required_field_null_value() {
+    let field = FieldSchema::new("name", FieldType::String).required();
+    let errors = validate_field(&field, Some(&Value::Null));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "required");
+}
+
+// ---------------------------------------------------------------------------
+// 28. Special characters in string fields
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_string_special_characters() {
+    let field = FieldSchema::new("bio", FieldType::String);
+    let specials = vec![
+        json!("<script>alert('xss')</script>"),
+        json!("line1\nline2"),
+        json!("tab\there"),
+        json!("\u{0000}null byte"),
+        json!("emoji \u{1F600}"),
+    ];
+    for val in &specials {
+        let errors = validate_field(&field, Some(val));
+        assert!(errors.is_empty(), "should accept special chars: {}", val);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 29. Constraint builder method
+// ---------------------------------------------------------------------------
+
+#[test]
+fn field_schema_constraint_builder() {
+    let field = FieldSchema::new("token", FieldType::String)
+        .constraint(Constraint::MinLength(8))
+        .constraint(Constraint::MaxLength(64))
+        .constraint(Constraint::Unique);
+
+    assert_eq!(field.constraints.len(), 3);
+}
+
+// ---------------------------------------------------------------------------
+// 30. Email field type validation (via validate_field)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_email_field_type() {
+    let field = FieldSchema::new("email", FieldType::Email).required();
+    assert!(validate_field(&field, Some(&json!("user@example.com"))).is_empty());
+
+    let errors = validate_field(&field, Some(&json!("bad-email")));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "invalid_email");
+
+    // Non-string value
+    let errors = validate_field(&field, Some(&json!(42)));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "invalid_type");
+}
+
+// ---------------------------------------------------------------------------
+// 31. UUID non-string value
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_uuid_non_string() {
+    let field = FieldSchema::new("id", FieldType::Uuid);
+    let errors = validate_field(&field, Some(&json!(12345)));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "invalid_type");
+}
+
+// ---------------------------------------------------------------------------
+// 32. Enum non-string value
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_enum_non_string() {
+    let field = FieldSchema::new("role", FieldType::Enum(vec!["admin".into(), "user".into()]));
+    let errors = validate_field(&field, Some(&json!(1)));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "invalid_type");
+}
+
+// ---------------------------------------------------------------------------
+// 33. FormError display
+// ---------------------------------------------------------------------------
+
+#[test]
+fn form_error_display() {
+    assert_eq!(
+        FormError::InvalidSchema("missing name".into()).to_string(),
+        "Invalid schema: missing name"
+    );
+    assert_eq!(
+        FormError::ValidationFailed(3).to_string(),
+        "Validation failed: 3 error(s)"
+    );
+    assert_eq!(
+        FormError::UnknownField("foo".into()).to_string(),
+        "Unknown field: foo"
+    );
+    assert_eq!(
+        FormError::SerializationError("bad json".into()).to_string(),
+        "Serialization error: bad json"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 34. ValidationResult all_errors aggregation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validation_result_all_errors() {
+    let mut result = ValidationResult::default();
+    result.add_error("a", "c1", "m1");
+    result.add_error("b", "c2", "m2");
+    result.add_error("a", "c3", "m3");
+    assert_eq!(result.all_errors().len(), 3);
+    assert_eq!(result.field_errors("a").len(), 2);
+    assert_eq!(result.field_errors("b").len(), 1);
+    assert!(result.field_errors("nonexistent").is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// 35. Optional field with required flag — null still ok
+// ---------------------------------------------------------------------------
+
+#[test]
+fn validate_optional_type_with_required_flag() {
+    let field = FieldSchema::new("nick", FieldType::Optional(Box::new(FieldType::String))).required();
+    // Optional type wrapper overrides required — null should be accepted.
+    assert!(validate_field(&field, None).is_empty());
+    assert!(validate_field(&field, Some(&Value::Null)).is_empty());
+    // But present non-string should fail type check.
+    let errors = validate_field(&field, Some(&json!(42)));
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "invalid_type");
 }
