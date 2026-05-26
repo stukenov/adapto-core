@@ -447,6 +447,8 @@ impl CollectionInner {
     }
 
     /// Try to merge multiple range/eq filters on the same indexed field into one range scan.
+    /// Note: index selection among multiple candidates is non-deterministic (HashMap order).
+    /// Correctness is guaranteed — results are always filtered by the full query.
     fn try_merged_range(&self, filters: &[Filter]) -> Option<Vec<String>> {
         // Collect all range bounds targeting the same field
         let mut field_bounds: std::collections::HashMap<&str, (

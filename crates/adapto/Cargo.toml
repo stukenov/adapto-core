@@ -2,6 +2,7 @@
 name = "adapto"
 version.workspace = true
 edition.workspace = true
+# Not published — depends on WIP crates. Use adapto_store/adapto_app/adapto_ui directly.
 publish = false
 
 [dependencies]

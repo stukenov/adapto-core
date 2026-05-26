@@ -5,10 +5,11 @@ edition.workspace = true
 publish = false
 
 [dependencies]
+pest = { workspace = true }
+pest_derive = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-uuid = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }

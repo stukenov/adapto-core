@@ -169,6 +169,10 @@ impl BTreeIndex {
     }
 
     /// Insert a document ID under the given key.
+    ///
+    /// Unique indexes allow multiple documents with `Null` keys (sparse behavior).
+    /// Documents missing the indexed field are keyed as `Null` and do not trigger
+    /// duplicate-key errors, similar to MongoDB sparse indexes.
     pub fn insert(&mut self, key: IndexKey, doc_id: &str) -> Result<(), StoreError> {
         if self.unique {
             if let Some(ids) = self.tree.get(&key) {

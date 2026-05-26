@@ -406,6 +406,9 @@ pub enum CardVariant {
 }
 
 /// A builder for `<div class="au-card ...">`.
+///
+/// `body`, `header`, and `footer` accept **raw HTML** — the caller is responsible
+/// for escaping user-controlled content with `html_escape()` before passing it in.
 #[derive(Debug, Clone)]
 pub struct Card {
     variant: CardVariant,
@@ -416,7 +419,7 @@ pub struct Card {
 }
 
 impl Card {
-    /// Create an elevated card with body content.
+    /// Create an elevated card. `body` is raw HTML — escape user content first.
     pub fn elevated(body: &str) -> Self {
         Self::new(body, CardVariant::Elevated)
     }

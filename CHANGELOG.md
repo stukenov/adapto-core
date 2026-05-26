@@ -7,6 +7,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [0.1.2] - 2026-05-26
 
+### Documentation
+- **Unique index NULL behavior** — documented sparse semantics (multiple NULLs allowed). (`index.rs:172`)
+- **Card raw HTML** — documented that body/header/footer accept raw HTML, caller must escape. (`components.rs:408`)
+- **Umbrella crate** — documented why `adapto` has `publish = false`. (`adapto/Cargo.toml`)
+- **Index selection** — documented non-deterministic behavior in AND queries. (`collection.rs:450`)
+
+### Fixed (adapto_parser)
+- Added missing `pest`/`pest_derive` dependencies.
+- Removed unused `uuid` dependency.
+
 ### Fixed
 
 #### adapto_store — Critical WAL fixes
