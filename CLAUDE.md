@@ -115,51 +115,64 @@ store.drop_collection("temp")?;
 ### Core Concepts
 
 - **App**: builder pattern. Configure title, port, store, routes, then `.run().await`
-- **page()**: register a GET route with path params. Handler receives `RequestContext`
-- **raw_get()**: register a GET route returning raw HTML (no layout)
-- **get_route()**: register a GET route with layout wrapping
+- **page()**: register a GET route. Handler receives `RequestContext`
+- **post()/put()/delete()/patch()**: register routes for other HTTP methods
+- **async_page()/async_post()/..**.: async variants for handlers that need `.await`
 - **fallback_fn()**: catch-all for unmatched routes
-- **FallbackResponse**: `Html(String)`, `Raw { body, content_type }`, `NotFound`
+- **PageResponse**: `Ok(String)`, `NotFound`, `Redirect`, `Json`, `BadRequest`, `Forbidden`, `InternalError`, `Custom`
+- **TestClient**: `app.test_client()` for HTTP testing without TCP binding
 
 ### API Reference
 
 ```rust
-use adapto_app::{App, FallbackResponse, RequestContext};
+use adapto_app::{App, PageResponse, RequestContext};
 use adapto_store::AdaptoStore;
 
 let store = AdaptoStore::open(None)?;
-// import data into store...
-
-let store_clone = store.clone();
 
 App::new("My App")
     .port(8080)
+    .bind("0.0.0.0")
     .store(store)
-    // Static page
+    .from_env()                              // reads PORT, BIND_ADDR, STORE_PATH
+    .health_check("/health")                 // 200 "ok"
+    .static_dir("/static", "./public")       // serve static files
+    // GET routes
     .page("/", |ctx| {
         render_home(ctx.store())
     })
-    // Page with path params (axum syntax)
     .page("/users/:id", |ctx| {
         let id = ctx.param("id");
         render_user(ctx.store(), id)
     })
-    // Nested params
-    .page("/law/codes/:code/:chapter/:article", |ctx| {
-        render_article(ctx.store(), ctx.param("code"), ctx.param("chapter"), ctx.param("article"))
+    // POST/PUT/DELETE routes
+    .post("/api/users", |ctx| {
+        let body: NewUser = ctx.body_json().unwrap();
+        PageResponse::Json(json!({"id": "123"}))
     })
-    // Fallback for dynamic/custom routes
-    .fallback_fn(move |path| {
+    .put("/api/users/:id", |ctx| {
+        PageResponse::Json(json!({"updated": true}))
+    })
+    .delete("/api/users/:id", |ctx| {
+        PageResponse::Json(json!({"deleted": true}))
+    })
+    // Async handlers
+    .async_page("/external", |ctx| async move {
+        let data = fetch_api().await;
+        PageResponse::Ok(render(data))
+    })
+    // Middleware
+    .with_middleware(|router| {
+        router.layer(tower_http::cors::CorsLayer::permissive())
+    })
+    // Graceful shutdown
+    .on_shutdown(|| { println!("bye"); })
+    // Fallback
+    .fallback_fn(|path| {
         if path == "/robots.txt" {
             return FallbackResponse::Raw {
                 body: "User-agent: *\nAllow: /".into(),
                 content_type: "text/plain; charset=utf-8",
-            };
-        }
-        if path.starts_with("/sitemap") && path.ends_with(".xml") {
-            return FallbackResponse::Raw {
-                body: generate_sitemap(&path),
-                content_type: "application/xml; charset=utf-8",
             };
         }
         FallbackResponse::NotFound
@@ -171,10 +184,35 @@ App::new("My App")
 ### RequestContext
 
 ```rust
-ctx.store()         // &AdaptoStore
-ctx.param("name")   // &str — path parameter value
-ctx.path()          // &str — full request path
-ctx.query           // String — query string
+ctx.store()                 // &AdaptoStore
+ctx.param("name")           // &str — path parameter value
+ctx.path()                  // &str — full request path
+ctx.method()                // &Method — HTTP method
+ctx.header("X-Custom")      // Option<&str> — request header
+ctx.headers()               // &HeaderMap — all headers
+ctx.body_json::<T>()        // Result<T> — parse body as JSON
+ctx.body_bytes()            // &[u8] — raw body
+ctx.body_str()              // Result<&str> — body as string
+ctx.cookie("session")       // Option<&str> — cookie value
+ctx.remote_addr()           // Option<SocketAddr> — client IP
+ctx.query_param("page")     // Option<String> — single query param
+ctx.query_pairs()           // Vec<(String, String)> — all query params
+ctx.lang_code()             // &str — language code (localized routes)
+ctx.lang_prefix()           // &str — language URL prefix
+```
+
+### TestClient
+
+```rust
+let app = App::new("Test").page("/hello", |_| "hi");
+let client = app.test_client();
+
+let resp = client.get("/hello").await;
+assert_eq!(resp.status(), 200);
+assert!(resp.text().contains("hi"));
+
+let resp = client.post("/api", r#"{"key":"val"}"#).await;
+let json: Value = resp.json();
 ```
 
 ### Route Registration Order

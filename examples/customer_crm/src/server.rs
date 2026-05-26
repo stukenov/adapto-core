@@ -1,11 +1,10 @@
-use adapto_app::handler::{ActionContext, ActionResult, AppState};
-use adapto_app::{App, ResourceMeta};
+use adapto_app::handler::{ActionContext, ActionResult};
+use adapto_app::{App, RequestContext, ResourceMeta};
 use adapto_macros::Resource;
 use adapto_store::{Query, Update};
 use adapto_ui::html_escape;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // Resource definition — replaces manual struct + helpers
@@ -295,11 +294,12 @@ async fn main() {
         .port(3001)
         .store_path("./data/crm")
         .resource::<Customer>()
-        .index_page(|state: Arc<AppState>| {
-            seed_if_empty(&state.store);
-            let table = render_table(&state.store, "");
-            let stats = render_stats(&state.store);
-            let db = state.store.stats();
+        .index_page(|ctx: RequestContext| {
+            let store = ctx.store();
+            seed_if_empty(store);
+            let table = render_table(store, "");
+            let stats = render_stats(store);
+            let db = store.stats();
             format!(
                 r#"<div id="app-stats">{stats}</div>
 <div style="font-size:var(--au-text-xs);color:var(--au-color-text-tertiary);font-family:var(--au-font-mono);margin-bottom:var(--au-space-3)">adapto_store &middot; {} docs &middot; WAL {}KB</div>

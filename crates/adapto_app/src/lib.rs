@@ -20,14 +20,23 @@ pub mod handler;
 pub mod layout;
 pub mod views;
 
+use axum::body::Bytes;
 use axum::extract::ws::WebSocketUpgrade;
 use axum::extract::{Path, State};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{self, MethodRouter};
 use axum::Router;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use serde_json::Value;
 use std::collections::HashMap;
+use std::future::Future;
+use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::services::ServeDir;
 
 pub use handler::{ActionContext, ActionHandler, ActionResult};
 pub use layout::{LayoutConfig, LIVE_JS};
@@ -50,6 +59,51 @@ pub enum PageResponse {
     NotFound,
     /// 301 Permanent Redirect.
     Redirect(String),
+    /// 200 OK with JSON body.
+    Json(Value),
+    /// 400 Bad Request with message.
+    BadRequest(String),
+    /// 403 Forbidden with message.
+    Forbidden(String),
+    /// 500 Internal Server Error with message.
+    InternalError(String),
+    /// Custom response with arbitrary status, content type, body, and headers.
+    Custom {
+        status: u16,
+        body: String,
+        content_type: String,
+        headers: Vec<(String, String)>,
+    },
+}
+
+impl PageResponse {
+    /// Create a JSON response from a serializable value.
+    pub fn json<T: Serialize>(value: &T) -> Self {
+        match serde_json::to_value(value) {
+            Ok(v) => PageResponse::Json(v),
+            Err(e) => PageResponse::InternalError(format!("JSON serialization error: {e}")),
+        }
+    }
+
+    /// Create a custom response with status code and body.
+    pub fn with_status(status: u16, body: impl Into<String>) -> Self {
+        PageResponse::Custom {
+            status,
+            body: body.into(),
+            content_type: "text/html; charset=utf-8".to_string(),
+            headers: Vec::new(),
+        }
+    }
+
+    /// Create a custom response with status, body, and content type.
+    pub fn raw(status: u16, body: impl Into<String>, content_type: impl Into<String>) -> Self {
+        PageResponse::Custom {
+            status,
+            body: body.into(),
+            content_type: content_type.into(),
+            headers: Vec::new(),
+        }
+    }
 }
 
 impl From<String> for PageResponse {
@@ -61,6 +115,47 @@ impl From<String> for PageResponse {
 impl From<&str> for PageResponse {
     fn from(s: &str) -> Self {
         PageResponse::Ok(s.to_string())
+    }
+}
+
+fn page_response_to_axum(response: PageResponse) -> Response {
+    match response {
+        PageResponse::Ok(html) => Html(html).into_response(),
+        PageResponse::NotFound => {
+            (StatusCode::NOT_FOUND, Html("<h1>Not Found</h1>".to_string())).into_response()
+        }
+        PageResponse::Redirect(url) => {
+            axum::response::Redirect::permanent(&url).into_response()
+        }
+        PageResponse::Json(value) => {
+            (StatusCode::OK, axum::Json(value)).into_response()
+        }
+        PageResponse::BadRequest(msg) => {
+            (StatusCode::BAD_REQUEST, Html(msg)).into_response()
+        }
+        PageResponse::Forbidden(msg) => {
+            (StatusCode::FORBIDDEN, Html(msg)).into_response()
+        }
+        PageResponse::InternalError(msg) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Html(msg)).into_response()
+        }
+        PageResponse::Custom { status, body, content_type, headers } => {
+            let status = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            let mut resp = (
+                status,
+                [(axum::http::header::CONTENT_TYPE, content_type)],
+                body,
+            ).into_response();
+            for (k, v) in headers {
+                if let (Ok(name), Ok(val)) = (
+                    axum::http::header::HeaderName::from_bytes(k.as_bytes()),
+                    HeaderValue::from_str(&v),
+                ) {
+                    resp.headers_mut().insert(name, val);
+                }
+            }
+            resp
+        }
     }
 }
 
@@ -87,26 +182,12 @@ struct LanguageRoute {
 
 /// Trait that `#[derive(Resource)]` will implement. The App builder uses this
 /// to auto-generate routes, views, and indexes.
-///
-/// Until the derive macro exists, implement this manually for each resource
-/// struct to register it with the app.
 pub trait ResourceMeta: Send + Sync + 'static {
-    /// The collection name in the store (e.g., `"customers"`).
     fn collection_name() -> &'static str;
-
-    /// The field names for this resource (e.g., `["name", "email", "company"]`).
     fn field_names() -> &'static [&'static str];
-
-    /// Human-readable singular label (e.g., `"Customer"`).
     fn resource_label() -> &'static str;
-
-    /// Human-readable plural label (e.g., `"Customers"`).
     fn resource_label_plural() -> &'static str;
-
-    /// URL route prefix (e.g., `"/customers"`).
     fn route_prefix() -> &'static str;
-
-    /// Ensure required indexes exist on the collection.
     fn ensure_indexes(store: &adapto_store::AdaptoStore);
 }
 
@@ -114,8 +195,6 @@ pub trait ResourceMeta: Send + Sync + 'static {
 // Resource registration
 // ---------------------------------------------------------------------------
 
-/// Metadata collected from a ResourceMeta implementation, stored in the builder
-/// as type-erased data so the App can work with heterogeneous resources.
 struct ResourceEntry {
     collection_name: String,
     label: String,
@@ -125,17 +204,11 @@ struct ResourceEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Custom route
+// RequestContext — enriched with body, headers, method
 // ---------------------------------------------------------------------------
 
-/// A custom route registered with the App, consisting of a method + path
-/// and a handler that receives the shared state.
-struct CustomRoute {
-    path: String,
-    handler: RouteHandler,
-}
-
-/// Request context for route handlers — includes store, path params, query string, language.
+/// Request context for route handlers — includes store, path params, query,
+/// headers, body, method, and language info.
 pub struct RequestContext {
     pub state: Arc<handler::AppState>,
     pub params: HashMap<String, String>,
@@ -143,6 +216,10 @@ pub struct RequestContext {
     pub request_path: String,
     pub lang_code: String,
     pub lang_prefix: String,
+    pub method: Method,
+    pub headers: HeaderMap,
+    pub body: Bytes,
+    pub remote_addr: Option<SocketAddr>,
 }
 
 impl RequestContext {
@@ -167,17 +244,139 @@ impl RequestContext {
     pub fn lang_prefix(&self) -> &str {
         &self.lang_prefix
     }
+
+    /// HTTP method (GET, POST, PUT, DELETE, etc.).
+    pub fn method(&self) -> &Method {
+        &self.method
+    }
+
+    /// Get a request header value by name.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.get(name).and_then(|v| v.to_str().ok())
+    }
+
+    /// Get all request headers.
+    pub fn headers(&self) -> &HeaderMap {
+        &self.headers
+    }
+
+    /// Parse the request body as JSON into a typed value.
+    pub fn body_json<T: DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
+        serde_json::from_slice(&self.body)
+    }
+
+    /// Get raw request body as bytes.
+    pub fn body_bytes(&self) -> &[u8] {
+        &self.body
+    }
+
+    /// Get request body as string.
+    pub fn body_str(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.body)
+    }
+
+    /// Get a cookie value by name.
+    pub fn cookie(&self, name: &str) -> Option<&str> {
+        self.headers
+            .get(axum::http::header::COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|cookies| {
+                cookies.split(';').find_map(|pair| {
+                    let pair = pair.trim();
+                    let (k, v) = pair.split_once('=')?;
+                    if k.trim() == name { Some(v.trim()) } else { None }
+                })
+            })
+    }
+
+    /// Client IP address (from socket, not X-Forwarded-For).
+    pub fn remote_addr(&self) -> Option<SocketAddr> {
+        self.remote_addr
+    }
+
+    /// Parse query string into key-value pairs.
+    pub fn query_pairs(&self) -> Vec<(String, String)> {
+        if self.query.is_empty() {
+            return Vec::new();
+        }
+        self.query
+            .split('&')
+            .filter_map(|pair| {
+                let (k, v) = pair.split_once('=')?;
+                Some((
+                    urlencoding_decode(k),
+                    urlencoding_decode(v),
+                ))
+            })
+            .collect()
+    }
+
+    /// Get a single query parameter by name.
+    pub fn query_param(&self, name: &str) -> Option<String> {
+        self.query_pairs()
+            .into_iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v)
+    }
 }
 
-/// Supported route handlers — for now just GET with HTML response.
-enum RouteHandler {
-    Get(Arc<dyn Fn(Arc<handler::AppState>) -> String + Send + Sync + 'static>),
-    RawGet(Arc<dyn Fn(Arc<handler::AppState>) -> String + Send + Sync + 'static>),
-    RawGetParams {
-        handler: Arc<dyn Fn(RequestContext) -> PageResponse + Send + Sync + 'static>,
-        lang_code: String,
-        lang_prefix: String,
-    },
+fn urlencoding_decode(s: &str) -> String {
+    let s = s.replace('+', " ");
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if hex.len() == 2 {
+                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                    result.push(byte as char);
+                    continue;
+                }
+            }
+            result.push('%');
+            result.push_str(&hex);
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// HTTP Method enum for route registration
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug)]
+enum HttpMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
+    Patch,
+}
+
+// ---------------------------------------------------------------------------
+// BoxHandler — unified async handler type
+// ---------------------------------------------------------------------------
+
+type BoxHandler = Arc<
+    dyn Fn(RequestContext) -> Pin<Box<dyn Future<Output = PageResponse> + Send>>
+        + Send
+        + Sync
+        + 'static,
+>;
+
+// ---------------------------------------------------------------------------
+// Custom route
+// ---------------------------------------------------------------------------
+
+struct CustomRoute {
+    path: String,
+    method: HttpMethod,
+    handler: BoxHandler,
+    lang_code: String,
+    lang_prefix: String,
+    wrap_layout: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -196,11 +395,15 @@ pub struct App {
     custom_routes: Vec<CustomRoute>,
     action_handlers:
         HashMap<String, Box<dyn Fn(&mut ActionContext<'_>) -> ActionResult + Send + Sync>>,
-    index_page_content:
-        Option<Arc<dyn Fn(Arc<handler::AppState>) -> String + Send + Sync + 'static>>,
+    index_page_content: Option<BoxHandler>,
     custom_fallback:
         Option<Arc<dyn Fn(String) -> FallbackResponse + Send + Sync + 'static>>,
     language_routes: Vec<LanguageRoute>,
+    static_dirs: Vec<(String, String)>,
+    layers: Vec<Box<dyn FnOnce(Router) -> Router + Send>>,
+    shutdown_hooks: Vec<Box<dyn FnOnce() + Send>>,
+    health_path: Option<String>,
+    error_handler: Option<Arc<dyn Fn(StatusCode, String) -> String + Send + Sync>>,
 }
 
 impl App {
@@ -218,6 +421,11 @@ impl App {
             index_page_content: None,
             custom_fallback: None,
             language_routes: Vec::new(),
+            static_dirs: Vec::new(),
+            layers: Vec::new(),
+            shutdown_hooks: Vec::new(),
+            health_path: None,
+            error_handler: None,
         }
     }
 
@@ -228,32 +436,45 @@ impl App {
     }
 
     /// Set the store path for persistent storage.
-    /// If not set, uses an in-memory store.
     pub fn store_path(mut self, path: impl Into<String>) -> Self {
         self.store_path = Some(path.into());
         self
     }
 
     /// Use a pre-built store instead of creating one in `run()`.
-    /// This allows importing data before starting the server.
     pub fn store(mut self, store: adapto_store::AdaptoStore) -> Self {
         self.prebuilt_store = Some(store);
         self
     }
 
     /// Set the bind address. Defaults to `"0.0.0.0"`.
-    /// Use `"127.0.0.1"` to restrict to localhost only.
     pub fn bind(mut self, addr: impl Into<String>) -> Self {
         self.bind_addr = addr.into();
         self
     }
 
-    /// Register a resource type with the app.
+    /// Apply configuration from environment variables.
     ///
-    /// This will:
-    /// 1. Ensure the collection exists in the store
-    /// 2. Call `ensure_indexes()` to set up required indexes
-    /// 3. Register a default placeholder route at the resource's `route_prefix`
+    /// Reads: `PORT`, `BIND_ADDR`, `STORE_PATH`.
+    /// Only overrides values not already set explicitly via builder methods.
+    pub fn from_env(mut self) -> Self {
+        if let Ok(port) = std::env::var("PORT") {
+            if let Ok(p) = port.parse::<u16>() {
+                self.port = p;
+            }
+        }
+        if let Ok(addr) = std::env::var("BIND_ADDR") {
+            self.bind_addr = addr;
+        }
+        if let Ok(path) = std::env::var("STORE_PATH") {
+            if self.store_path.is_none() {
+                self.store_path = Some(path);
+            }
+        }
+        self
+    }
+
+    /// Register a resource type with the app.
     pub fn resource<R: ResourceMeta>(mut self) -> Self {
         self.resources.push(ResourceEntry {
             collection_name: R::collection_name().to_string(),
@@ -266,9 +487,6 @@ impl App {
     }
 
     /// Register a WebSocket action handler.
-    ///
-    /// When the client sends an event with `handler: "action_name"`,
-    /// the registered function is called with the store and payload.
     pub fn on(
         mut self,
         action: impl Into<String>,
@@ -278,51 +496,285 @@ impl App {
         self
     }
 
-    /// Register a custom GET route that returns HTML.
-    pub fn get_route(
-        mut self,
-        path: impl Into<String>,
-        handler: impl Fn(Arc<handler::AppState>) -> String + Send + Sync + 'static,
-    ) -> Self {
-        self.custom_routes.push(CustomRoute {
-            path: path.into(),
-            handler: RouteHandler::Get(Arc::new(handler)),
-        });
-        self
-    }
+    // -----------------------------------------------------------------------
+    // Sync route registration (backward-compatible)
+    // -----------------------------------------------------------------------
 
-    /// Register a custom GET route that returns raw HTML (no layout wrapping).
-    pub fn raw_get(
-        mut self,
-        path: impl Into<String>,
-        handler: impl Fn(Arc<handler::AppState>) -> String + Send + Sync + 'static,
-    ) -> Self {
-        self.custom_routes.push(CustomRoute {
-            path: path.into(),
-            handler: RouteHandler::RawGet(Arc::new(handler)),
-        });
-        self
-    }
-
-    /// Register a GET route with path parameters, returning raw HTML.
-    /// Path params use axum syntax: `/law/laws/:slug`
-    ///
-    /// Handler can return `String` (always 200) or `PageResponse` (200/404/301).
+    /// Register a GET route that returns raw HTML (no layout).
+    /// Handler can return `String` (always 200) or `PageResponse` (200/404/301/JSON/etc).
     pub fn page<R: Into<PageResponse> + 'static>(
         mut self,
         path: impl Into<String>,
         handler: impl Fn(RequestContext) -> R + Send + Sync + 'static,
     ) -> Self {
+        let handler = Arc::new(handler);
         self.custom_routes.push(CustomRoute {
             path: path.into(),
-            handler: RouteHandler::RawGetParams {
-                handler: Arc::new(move |ctx| handler(ctx).into()),
-                lang_code: String::new(),
-                lang_prefix: String::new(),
-            },
+            method: HttpMethod::Get,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(async move { h(ctx).into() })
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
         });
         self
     }
+
+    /// Register a GET route with layout wrapping.
+    pub fn get_route(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> String + Send + Sync + 'static,
+    ) -> Self {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Get,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(async move { PageResponse::Ok(h(ctx)) })
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: true,
+        });
+        self
+    }
+
+    /// Register a GET route returning raw HTML (no layout, no path params).
+    pub fn raw_get(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(Arc<handler::AppState>) -> String + Send + Sync + 'static,
+    ) -> Self {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Get,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(async move { PageResponse::Ok(h(ctx.state)) })
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    /// Register a POST route.
+    pub fn post<R: Into<PageResponse> + 'static>(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> R + Send + Sync + 'static,
+    ) -> Self {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Post,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(async move { h(ctx).into() })
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    /// Register a PUT route.
+    pub fn put<R: Into<PageResponse> + 'static>(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> R + Send + Sync + 'static,
+    ) -> Self {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Put,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(async move { h(ctx).into() })
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    /// Register a DELETE route.
+    pub fn delete<R: Into<PageResponse> + 'static>(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> R + Send + Sync + 'static,
+    ) -> Self {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Delete,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(async move { h(ctx).into() })
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    /// Register a PATCH route.
+    pub fn patch<R: Into<PageResponse> + 'static>(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> R + Send + Sync + 'static,
+    ) -> Self {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Patch,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(async move { h(ctx).into() })
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    // -----------------------------------------------------------------------
+    // Async route registration
+    // -----------------------------------------------------------------------
+
+    /// Register an async GET route.
+    pub fn async_page<Fut>(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> Fut + Send + Sync + 'static,
+    ) -> Self
+    where
+        Fut: Future<Output = PageResponse> + Send + 'static,
+    {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Get,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(h(ctx))
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    /// Register an async POST route.
+    pub fn async_post<Fut>(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> Fut + Send + Sync + 'static,
+    ) -> Self
+    where
+        Fut: Future<Output = PageResponse> + Send + 'static,
+    {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Post,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(h(ctx))
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    /// Register an async PUT route.
+    pub fn async_put<Fut>(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> Fut + Send + Sync + 'static,
+    ) -> Self
+    where
+        Fut: Future<Output = PageResponse> + Send + 'static,
+    {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Put,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(h(ctx))
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    /// Register an async DELETE route.
+    pub fn async_delete<Fut>(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> Fut + Send + Sync + 'static,
+    ) -> Self
+    where
+        Fut: Future<Output = PageResponse> + Send + 'static,
+    {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Delete,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(h(ctx))
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    /// Register an async PATCH route.
+    pub fn async_patch<Fut>(
+        mut self,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> Fut + Send + Sync + 'static,
+    ) -> Self
+    where
+        Fut: Future<Output = PageResponse> + Send + 'static,
+    {
+        let handler = Arc::new(handler);
+        self.custom_routes.push(CustomRoute {
+            path: path.into(),
+            method: HttpMethod::Patch,
+            handler: Arc::new(move |ctx| {
+                let h = handler.clone();
+                Box::pin(h(ctx))
+            }),
+            lang_code: String::new(),
+            lang_prefix: String::new(),
+            wrap_layout: false,
+        });
+        self
+    }
+
+    // -----------------------------------------------------------------------
+    // Localized routes
+    // -----------------------------------------------------------------------
 
     /// Configure language prefixes for `localized_page()`.
     pub fn languages<L: LangConfig>(mut self, langs: Vec<L>) -> Self {
@@ -336,10 +788,7 @@ impl App {
         self
     }
 
-    /// Register a route for all configured languages.
-    ///
-    /// Automatically registers the route with each language prefix.
-    /// The handler receives `RequestContext` with `lang_code` and `lang_prefix` populated.
+    /// Register a GET route for all configured languages.
     pub fn localized_page<R: Into<PageResponse> + 'static>(
         mut self,
         path: impl Into<String>,
@@ -352,34 +801,77 @@ impl App {
                 path
             );
         }
-        let handler = Arc::new(move |ctx: RequestContext| -> PageResponse { handler(ctx).into() });
+        let handler: Arc<dyn Fn(RequestContext) -> PageResponse + Send + Sync> =
+            Arc::new(move |ctx: RequestContext| -> PageResponse { handler(ctx).into() });
         for lang in &self.language_routes {
             let full_path = format!("{}{}", lang.prefix, path);
+            let h = handler.clone();
             self.custom_routes.push(CustomRoute {
                 path: full_path,
-                handler: RouteHandler::RawGetParams {
-                    handler: handler.clone(),
-                    lang_code: lang.code.clone(),
-                    lang_prefix: lang.prefix.clone(),
-                },
+                method: HttpMethod::Get,
+                handler: Arc::new(move |ctx| {
+                    let h = h.clone();
+                    Box::pin(async move { h(ctx) })
+                }),
+                lang_code: lang.code.clone(),
+                lang_prefix: lang.prefix.clone(),
+                wrap_layout: false,
             });
         }
         self
     }
 
-    /// Set a custom index page renderer. If not set, the index page
-    /// shows a welcome message listing registered resources.
-    pub fn index_page(
+    /// Register a POST route for all configured languages.
+    pub fn localized_post<R: Into<PageResponse> + 'static>(
         mut self,
-        renderer: impl Fn(Arc<handler::AppState>) -> String + Send + Sync + 'static,
+        path: impl Into<String>,
+        handler: impl Fn(RequestContext) -> R + Send + Sync + 'static,
     ) -> Self {
-        self.index_page_content = Some(Arc::new(renderer));
+        let path = path.into();
+        if self.language_routes.is_empty() {
+            panic!(
+                "localized_post(\"{}\") called but no languages configured. Call .languages() first.",
+                path
+            );
+        }
+        let handler: Arc<dyn Fn(RequestContext) -> PageResponse + Send + Sync> =
+            Arc::new(move |ctx: RequestContext| -> PageResponse { handler(ctx).into() });
+        for lang in &self.language_routes {
+            let full_path = format!("{}{}", lang.prefix, path);
+            let h = handler.clone();
+            self.custom_routes.push(CustomRoute {
+                path: full_path,
+                method: HttpMethod::Post,
+                handler: Arc::new(move |ctx| {
+                    let h = h.clone();
+                    Box::pin(async move { h(ctx) })
+                }),
+                lang_code: lang.code.clone(),
+                lang_prefix: lang.prefix.clone(),
+                wrap_layout: false,
+            });
+        }
+        self
+    }
+
+    // -----------------------------------------------------------------------
+    // Index page
+    // -----------------------------------------------------------------------
+
+    /// Set a custom index page renderer.
+    pub fn index_page<R: Into<PageResponse> + 'static>(
+        mut self,
+        renderer: impl Fn(RequestContext) -> R + Send + Sync + 'static,
+    ) -> Self {
+        let renderer = Arc::new(renderer);
+        self.index_page_content = Some(Arc::new(move |ctx| {
+            let r = renderer.clone();
+            Box::pin(async move { r(ctx).into() })
+        }));
         self
     }
 
     /// Set a custom fallback handler for unmatched routes.
-    /// The closure receives the request path and returns `Some(html)` to serve
-    /// or `None` to return 404.
     pub fn fallback_fn(
         mut self,
         handler: impl Fn(String) -> FallbackResponse + Send + Sync + 'static,
@@ -388,46 +880,101 @@ impl App {
         self
     }
 
-    /// The configured application title.
+    // -----------------------------------------------------------------------
+    // Static files
+    // -----------------------------------------------------------------------
+
+    /// Serve static files from a directory.
+    /// Example: `.static_dir("/static", "./public")` serves `./public/file.css` at `/static/file.css`.
+    pub fn static_dir(mut self, url_path: impl Into<String>, dir: impl Into<String>) -> Self {
+        self.static_dirs.push((url_path.into(), dir.into()));
+        self
+    }
+
+    // -----------------------------------------------------------------------
+    // Middleware
+    // -----------------------------------------------------------------------
+
+    /// Add a middleware function that transforms the Router.
+    /// Use this to add tower layers, CORS, compression, etc.
+    ///
+    /// Example:
+    /// ```rust,no_run
+    /// use tower_http::cors::CorsLayer;
+    /// # use adapto_app::App;
+    /// App::new("My App")
+    ///     .with_middleware(|router| router.layer(CorsLayer::permissive()));
+    /// ```
+    pub fn with_middleware(mut self, f: impl FnOnce(Router) -> Router + Send + 'static) -> Self {
+        self.layers.push(Box::new(f));
+        self
+    }
+
+    // -----------------------------------------------------------------------
+    // Graceful shutdown
+    // -----------------------------------------------------------------------
+
+    /// Register a function to run on graceful shutdown.
+    pub fn on_shutdown(mut self, hook: impl FnOnce() + Send + 'static) -> Self {
+        self.shutdown_hooks.push(Box::new(hook));
+        self
+    }
+
+    /// Add a health check endpoint (returns 200 "ok").
+    pub fn health_check(mut self, path: impl Into<String>) -> Self {
+        self.health_path = Some(path.into());
+        self
+    }
+
+    // -----------------------------------------------------------------------
+    // Error handling
+    // -----------------------------------------------------------------------
+
+    /// Set a custom error page renderer for HTTP error responses.
+    /// Receives the status code and default message, returns HTML.
+    pub fn error_handler(
+        mut self,
+        handler: impl Fn(StatusCode, String) -> String + Send + Sync + 'static,
+    ) -> Self {
+        self.error_handler = Some(Arc::new(handler));
+        self
+    }
+
+    // -----------------------------------------------------------------------
+    // Accessors
+    // -----------------------------------------------------------------------
+
     pub fn title(&self) -> &str {
         &self.title
     }
 
-    /// The configured port.
     pub fn configured_port(&self) -> u16 {
         self.port
     }
 
-    /// The configured store path (if any).
     pub fn configured_store_path(&self) -> Option<&str> {
         self.store_path.as_deref()
     }
 
-    /// The number of registered resources.
     pub fn resource_count(&self) -> usize {
         self.resources.len()
     }
 
-    /// Start the application.
-    ///
-    /// This will:
-    /// 1. Open the AdaptoStore (persistent or in-memory)
-    /// 2. Call `ensure_indexes()` for each registered resource
-    /// 3. Build an axum Router with all routes
-    /// 4. Serve `/_adapto/live.js` for the client runtime
-    /// 5. Set up the WebSocket endpoint at `/ws`
-    /// 6. Bind to the configured port and begin serving
-    pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+    // -----------------------------------------------------------------------
+    // Build router (extracted for test_client)
+    // -----------------------------------------------------------------------
+
+    /// Build the configured Router without binding to a TCP listener.
+    /// Useful for testing with `axum::extract::connect_info::MockConnectInfo`.
+    pub fn build(self) -> Result<(Router, Vec<Box<dyn FnOnce() + Send>>), Box<dyn std::error::Error>> {
         let _ = tracing_subscriber::fmt::try_init();
 
-        // 1. Open store (use prebuilt if provided)
         let store = if let Some(s) = self.prebuilt_store {
             s
         } else {
             adapto_store::AdaptoStore::open(self.store_path.as_deref())?
         };
 
-        // 2. Ensure indexes for each resource
         for resource in &self.resources {
             (resource.ensure_indexes)(&store);
             tracing::info!(
@@ -438,7 +985,6 @@ impl App {
             );
         }
 
-        // 3. Build action handler map
         let handlers: handler::ActionHandlerMap = Arc::new(
             self.action_handlers
                 .into_iter()
@@ -452,14 +998,18 @@ impl App {
             title: self.title.clone(),
         });
 
-        // 4. Build router
         let mut router = Router::new();
 
         // Serve live.js
-        router = router.route("/_adapto/live.js", get(serve_live_js));
+        router = router.route("/_adapto/live.js", routing::get(serve_live_js));
 
         // WebSocket endpoint
-        router = router.route("/ws", get(handle_ws));
+        router = router.route("/ws", routing::get(handle_ws));
+
+        // Health check
+        if let Some(ref health_path) = self.health_path {
+            router = router.route(health_path, routing::get(|| async { "ok" }));
+        }
 
         // Resource placeholder routes
         for resource in &self.resources {
@@ -470,9 +1020,8 @@ impl App {
             let rp = route_prefix.clone();
             router = router.route(
                 &route_prefix,
-                get(move |State(_state): State<Arc<handler::AppState>>| {
-                    let content =
-                        views::render_resource_placeholder(&label_plural, &rp);
+                routing::get(move |State(_state): State<Arc<handler::AppState>>| {
+                    let content = views::render_resource_placeholder(&label_plural, &rp);
                     let html = layout::render_layout(&LayoutConfig {
                         title: &title,
                         nav_items: &[],
@@ -486,137 +1035,179 @@ impl App {
             );
         }
 
-        // Custom routes
+        // Custom routes — group by path, merge methods
         let has_custom_index = self.custom_routes.iter().any(|r| r.path == "/");
+        let title = self.title.clone();
+        let error_handler = self.error_handler.clone();
+
         for custom in self.custom_routes {
-            let title = self.title.clone();
-            match custom.handler {
-                RouteHandler::Get(handler) => {
-                    router = router.route(
-                        &custom.path,
-                        get(
-                            move |State(state): State<Arc<handler::AppState>>| {
-                                let content = handler(state.clone());
-                                let html = layout::render_layout(&LayoutConfig {
-                                    title: &title,
-                                    nav_items: &[],
-                                    breadcrumbs: &[],
-                                    stats_html: "",
-                                    content_html: &content,
-                                    extra_css: "",
-                                });
-                                async move { Html(html) }
-                            },
-                        ),
-                    );
-                }
-                RouteHandler::RawGet(handler) => {
-                    router = router.route(
-                        &custom.path,
-                        get(
-                            move |State(state): State<Arc<handler::AppState>>| {
-                                let html = handler(state.clone());
-                                async move { Html(html) }
-                            },
-                        ),
-                    );
-                }
-                RouteHandler::RawGetParams { handler, lang_code, lang_prefix } => {
-                    router = router.route(
-                        &custom.path,
-                        get(
-                            move |State(state): State<Arc<handler::AppState>>,
-                                  params_opt: Option<Path<HashMap<String, String>>>,
-                                  req_uri: axum::http::Uri| {
-                                let params = params_opt.map(|p| p.0).unwrap_or_default();
-                                let query_str = req_uri.query().unwrap_or("").to_string();
-                                let ctx = RequestContext {
-                                    state: state.clone(),
-                                    params,
-                                    query: query_str,
-                                    request_path: req_uri.path().to_string(),
-                                    lang_code: lang_code.clone(),
-                                    lang_prefix: lang_prefix.clone(),
-                                };
-                                let response = handler(ctx);
-                                async move {
-                                    match response {
-                                        PageResponse::Ok(html) => Html(html).into_response(),
-                                        PageResponse::NotFound => {
-                                            (axum::http::StatusCode::NOT_FOUND, Html("<h1>Not Found</h1>".to_string())).into_response()
-                                        }
-                                        PageResponse::Redirect(url) => {
-                                            axum::response::Redirect::permanent(&url).into_response()
-                                        }
-                                    }
-                                }
-                            },
-                        ),
-                    );
-                }
-            }
-        }
+            let handler = custom.handler.clone();
+            let lang_code = custom.lang_code.clone();
+            let lang_prefix = custom.lang_prefix.clone();
+            let wrap_layout = custom.wrap_layout;
+            let title_clone = title.clone();
+            let err_handler = error_handler.clone();
 
-        // Index route (skip if a custom route already registered "/")
-        let title_for_index = self.title.clone();
-        let resource_info: Vec<(String, String)> = self
-            .resources
-            .iter()
-            .map(|r| (r.label_plural.clone(), r.route_prefix.clone()))
-            .collect();
+            let axum_handler = move |
+                State(state): State<Arc<handler::AppState>>,
+                method: Method,
+                uri: Uri,
+                headers: HeaderMap,
+                params_opt: Option<Path<HashMap<String, String>>>,
+                body: Bytes,
+            | {
+                let handler = handler.clone();
+                let lang_code = lang_code.clone();
+                let lang_prefix = lang_prefix.clone();
+                let title_clone = title_clone.clone();
+                let err_handler = err_handler.clone();
+                async move {
+                    let params = params_opt.map(|p| p.0).unwrap_or_default();
+                    let query_str = uri.query().unwrap_or("").to_string();
+                    let ctx = RequestContext {
+                        state: state.clone(),
+                        params,
+                        query: query_str,
+                        request_path: uri.path().to_string(),
+                        lang_code,
+                        lang_prefix,
+                        method,
+                        headers,
+                        body,
+                        remote_addr: None,
+                    };
+                    let response = handler(ctx).await;
 
-        if !has_custom_index {
-            if let Some(index_renderer) = self.index_page_content {
-                router = router.route(
-                    "/",
-                    get(
-                        move |State(state): State<Arc<handler::AppState>>| {
-                            let content = index_renderer(state.clone());
+                    if wrap_layout {
+                        if let PageResponse::Ok(ref content) = response {
                             let html = layout::render_layout(&LayoutConfig {
-                                title: &title_for_index,
+                                title: &title_clone,
                                 nav_items: &[],
                                 breadcrumbs: &[],
                                 stats_html: "",
-                                content_html: &content,
+                                content_html: content,
                                 extra_css: "",
                             });
-                            async move { Html(html) }
-                        },
-                    ),
+                            return Html(html).into_response();
+                        }
+                    }
+
+                    let mut resp = page_response_to_axum(response);
+
+                    if let Some(ref eh) = err_handler {
+                        let status = resp.status();
+                        if status.is_client_error() || status.is_server_error() {
+                            let msg = status.canonical_reason().unwrap_or("Error").to_string();
+                            let html = eh(status, msg);
+                            resp = (status, Html(html)).into_response();
+                        }
+                    }
+
+                    resp
+                }
+            };
+
+            let method_router: MethodRouter<Arc<handler::AppState>> = match custom.method {
+                HttpMethod::Get => routing::get(axum_handler),
+                HttpMethod::Post => routing::post(axum_handler),
+                HttpMethod::Put => routing::put(axum_handler),
+                HttpMethod::Delete => routing::delete(axum_handler),
+                HttpMethod::Patch => routing::patch(axum_handler),
+            };
+
+            router = router.route(&custom.path, method_router);
+        }
+
+        // Index route
+        if !has_custom_index {
+            let title_for_index = title.clone();
+            let resource_info: Vec<(String, String)> = self
+                .resources
+                .iter()
+                .map(|r| (r.label_plural.clone(), r.route_prefix.clone()))
+                .collect();
+
+            if let Some(index_renderer) = self.index_page_content {
+                let title_c = title.clone();
+                router = router.route(
+                    "/",
+                    routing::get(move |
+                        State(state): State<Arc<handler::AppState>>,
+                        method: Method,
+                        uri: Uri,
+                        headers: HeaderMap,
+                    | {
+                        let index_renderer = index_renderer.clone();
+                        let title_c = title_c.clone();
+                        async move {
+                            let ctx = RequestContext {
+                                state: state.clone(),
+                                params: HashMap::new(),
+                                query: uri.query().unwrap_or("").to_string(),
+                                request_path: "/".to_string(),
+                                lang_code: String::new(),
+                                lang_prefix: String::new(),
+                                method,
+                                headers,
+                                body: Bytes::new(),
+                                remote_addr: None,
+                            };
+                            let response = index_renderer(ctx).await;
+                            match response {
+                                PageResponse::Ok(content) => {
+                                    let html = layout::render_layout(&LayoutConfig {
+                                        title: &title_c,
+                                        nav_items: &[],
+                                        breadcrumbs: &[],
+                                        stats_html: "",
+                                        content_html: &content,
+                                        extra_css: "",
+                                    });
+                                    Html(html).into_response()
+                                }
+                                other => page_response_to_axum(other),
+                            }
+                        }
+                    }),
                 );
             } else {
                 router = router.route(
                     "/",
-                    get(
-                        move |State(_state): State<Arc<handler::AppState>>| {
-                            let content = render_default_index(&title_for_index, &resource_info);
-                            let html = layout::render_layout(&LayoutConfig {
-                                title: &title_for_index,
-                                nav_items: &[],
-                                breadcrumbs: &[],
-                                stats_html: "",
-                                content_html: &content,
-                                extra_css: "",
-                            });
-                            async move { Html(html) }
-                        },
-                    ),
+                    routing::get(move |State(_state): State<Arc<handler::AppState>>| {
+                        let content = render_default_index(&title_for_index, &resource_info);
+                        let html = layout::render_layout(&LayoutConfig {
+                            title: &title_for_index,
+                            nav_items: &[],
+                            breadcrumbs: &[],
+                            stats_html: "",
+                            content_html: &content,
+                            extra_css: "",
+                        });
+                        async move { Html(html) }
+                    }),
                 );
             }
         }
 
-        let router = router.with_state(state);
+        let mut router = router.with_state(state);
 
-        // Normalize trailing slashes + custom fallback
+        // Static file directories
+        for (url_path, dir_path) in &self.static_dirs {
+            let url = url_path.trim_end_matches('/');
+            let serve = ServeDir::new(dir_path);
+            router = router.nest_service(url, serve);
+        }
+
+        // Trailing-slash normalization + custom fallback
         let custom_fb = self.custom_fallback.clone();
-        let router = router.fallback(move |req: axum::http::Request<axum::body::Body>| {
+        router = router.fallback(move |req: axum::http::Request<axum::body::Body>| {
             let custom_fb = custom_fb.clone();
             async move {
                 let path = req.uri().path();
                 if path.len() > 1 && path.ends_with('/') {
                     let trimmed = path.trim_end_matches('/');
                     if trimmed.starts_with("//") || !trimmed.starts_with('/') {
-                        return (axum::http::StatusCode::BAD_REQUEST, "Bad Request").into_response();
+                        return (StatusCode::BAD_REQUEST, "Bad Request").into_response();
                     }
                     let new_uri = if let Some(q) = req.uri().query() {
                         format!("{trimmed}?{q}")
@@ -637,15 +1228,29 @@ impl App {
                         FallbackResponse::NotFound => {}
                     }
                 }
-                (axum::http::StatusCode::NOT_FOUND, "Not Found").into_response()
+                (StatusCode::NOT_FOUND, "Not Found").into_response()
             }
         });
 
-        // 5. Bind and serve
+        // Apply middleware layers
+        for layer_fn in self.layers {
+            router = layer_fn(router);
+        }
+
+        Ok((router, self.shutdown_hooks))
+    }
+
+    /// Start the application with graceful shutdown support.
+    pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         let addr = format!("{}:{}", self.bind_addr, self.port);
+        let title = self.title.clone();
+        let store_path = self.store_path.clone();
+
+        let (router, shutdown_hooks) = self.build()?;
+
         println!();
-        println!("  {} running at http://{}", self.title, addr);
-        if let Some(ref path) = self.store_path {
+        println!("  {} running at http://{}", title, addr);
+        if let Some(ref path) = store_path {
             println!("  Database: {}/store.wal", path);
         } else {
             println!("  Database: in-memory");
@@ -654,9 +1259,178 @@ impl App {
         println!();
 
         let listener = TcpListener::bind(&addr).await?;
-        axum::serve(listener, router).await?;
+
+        axum::serve(listener, router)
+            .with_graceful_shutdown(shutdown_signal())
+            .await?;
+
+        for hook in shutdown_hooks {
+            hook();
+        }
 
         Ok(())
+    }
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    println!("\n  Shutting down gracefully...");
+}
+
+// ---------------------------------------------------------------------------
+// Test client
+// ---------------------------------------------------------------------------
+
+/// A test client for making HTTP requests against the app without TCP binding.
+pub struct TestClient {
+    inner: axum_test_client::InnerClient,
+}
+
+mod axum_test_client {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    pub struct InnerClient {
+        router: Router,
+    }
+
+    impl InnerClient {
+        pub fn new(router: Router) -> Self {
+            Self { router }
+        }
+
+        pub async fn request(&self, req: Request<Body>) -> TestResponse {
+            let resp = self.router.clone().oneshot(req).await.unwrap();
+            let status = resp.status();
+            let headers = resp.headers().clone();
+            let body_bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+            TestResponse {
+                status,
+                headers,
+                body: body_bytes,
+            }
+        }
+    }
+
+    /// Response from TestClient with assertion helpers.
+    pub struct TestResponse {
+        pub status: StatusCode,
+        pub headers: HeaderMap,
+        pub body: Bytes,
+    }
+
+    impl TestResponse {
+        pub fn status(&self) -> StatusCode {
+            self.status
+        }
+
+        pub fn text(&self) -> String {
+            String::from_utf8_lossy(&self.body).to_string()
+        }
+
+        pub fn json<T: DeserializeOwned>(&self) -> T {
+            serde_json::from_slice(&self.body).unwrap()
+        }
+
+        pub fn header(&self, name: &str) -> Option<&str> {
+            self.headers.get(name).and_then(|v| v.to_str().ok())
+        }
+    }
+}
+
+pub use axum_test_client::TestResponse;
+
+impl App {
+    /// Create a test client for this app (no TCP binding).
+    pub fn test_client(self) -> TestClient {
+        let (router, _hooks) = self.build().expect("failed to build app for testing");
+        TestClient {
+            inner: axum_test_client::InnerClient::new(router),
+        }
+    }
+}
+
+impl TestClient {
+    pub async fn get(&self, path: &str) -> TestResponse {
+        let req = axum::http::Request::builder()
+            .method(Method::GET)
+            .uri(path)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        self.inner.request(req).await
+    }
+
+    pub async fn post(&self, path: &str, body: &str) -> TestResponse {
+        let req = axum::http::Request::builder()
+            .method(Method::POST)
+            .uri(path)
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body.to_string()))
+            .unwrap();
+        self.inner.request(req).await
+    }
+
+    pub async fn put(&self, path: &str, body: &str) -> TestResponse {
+        let req = axum::http::Request::builder()
+            .method(Method::PUT)
+            .uri(path)
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body.to_string()))
+            .unwrap();
+        self.inner.request(req).await
+    }
+
+    pub async fn delete(&self, path: &str) -> TestResponse {
+        let req = axum::http::Request::builder()
+            .method(Method::DELETE)
+            .uri(path)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        self.inner.request(req).await
+    }
+
+    pub async fn request(
+        &self,
+        method: Method,
+        path: &str,
+        headers: Vec<(&str, &str)>,
+        body: Option<&str>,
+    ) -> TestResponse {
+        let mut builder = axum::http::Request::builder()
+            .method(method)
+            .uri(path);
+        for (k, v) in headers {
+            builder = builder.header(k, v);
+        }
+        let body = match body {
+            Some(b) => axum::body::Body::from(b.to_string()),
+            None => axum::body::Body::empty(),
+        };
+        let req = builder.body(body).unwrap();
+        self.inner.request(req).await
     }
 }
 
@@ -664,7 +1438,6 @@ impl App {
 // Built-in route handlers
 // ---------------------------------------------------------------------------
 
-/// Serve the embedded live.js file with the correct content type.
 async fn serve_live_js() -> Response {
     (
         [("content-type", "application/javascript; charset=utf-8")],
@@ -673,7 +1446,6 @@ async fn serve_live_js() -> Response {
         .into_response()
 }
 
-/// Handle WebSocket upgrade requests.
 async fn handle_ws(
     ws: WebSocketUpgrade,
     State(state): State<Arc<handler::AppState>>,
@@ -681,7 +1453,6 @@ async fn handle_ws(
     ws.on_upgrade(move |socket| handler::ws_event_loop(socket, state))
 }
 
-/// Render the default index page listing registered resources.
 fn render_default_index(title: &str, resources: &[(String, String)]) -> String {
     let title_esc = adapto_ui::html_escape(title);
 
@@ -787,5 +1558,152 @@ mod tests {
         assert!(html.contains("2 resources registered"));
         assert!(html.contains("/customers"));
         assert!(html.contains("/orders"));
+    }
+
+    #[test]
+    fn page_response_json() {
+        let resp = PageResponse::json(&serde_json::json!({"ok": true}));
+        match resp {
+            PageResponse::Json(v) => assert_eq!(v["ok"], true),
+            _ => panic!("expected Json variant"),
+        }
+    }
+
+    #[test]
+    fn page_response_with_status() {
+        let resp = PageResponse::with_status(418, "I'm a teapot");
+        match resp {
+            PageResponse::Custom { status, body, .. } => {
+                assert_eq!(status, 418);
+                assert_eq!(body, "I'm a teapot");
+            }
+            _ => panic!("expected Custom variant"),
+        }
+    }
+
+    #[test]
+    fn url_decode() {
+        assert_eq!(urlencoding_decode("hello+world"), "hello world");
+        assert_eq!(urlencoding_decode("test%20value"), "test value");
+        assert_eq!(urlencoding_decode("a%26b"), "a&b");
+    }
+
+    #[tokio::test]
+    async fn test_client_get() {
+        let app = App::new("Test")
+            .page("/hello", |_ctx| "Hello, World!");
+
+        let client = app.test_client();
+        let resp = client.get("/hello").await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(resp.text().contains("Hello, World!"));
+    }
+
+    #[tokio::test]
+    async fn test_client_post_json() {
+        let app = App::new("Test")
+            .post("/api/echo", |ctx: RequestContext| {
+                let body: serde_json::Value = ctx.body_json().unwrap_or_default();
+                PageResponse::Json(body)
+            });
+
+        let client = app.test_client();
+        let resp = client.post("/api/echo", r#"{"name":"test"}"#).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json: serde_json::Value = resp.json();
+        assert_eq!(json["name"], "test");
+    }
+
+    #[tokio::test]
+    async fn test_client_not_found() {
+        let app = App::new("Test");
+        let client = app.test_client();
+        let resp = client.get("/nonexistent").await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_client_page_response_variants() {
+        let app = App::new("Test")
+            .page("/ok", |_| PageResponse::Ok("ok".to_string()))
+            .page("/bad", |_| PageResponse::BadRequest("bad".to_string()))
+            .page("/forbidden", |_| PageResponse::Forbidden("no".to_string()))
+            .page("/error", |_| PageResponse::InternalError("oops".to_string()))
+            .page("/redirect", |_| PageResponse::Redirect("/target".to_string()));
+
+        let client = app.test_client();
+
+        assert_eq!(client.get("/ok").await.status(), StatusCode::OK);
+        assert_eq!(client.get("/bad").await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(client.get("/forbidden").await.status(), StatusCode::FORBIDDEN);
+        assert_eq!(client.get("/error").await.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(client.get("/redirect").await.status(), StatusCode::PERMANENT_REDIRECT);
+    }
+
+    #[tokio::test]
+    async fn test_health_check() {
+        let app = App::new("Test")
+            .health_check("/health");
+
+        let client = app.test_client();
+        let resp = client.get("/health").await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.text(), "ok");
+    }
+
+    #[tokio::test]
+    async fn test_query_params() {
+        let app = App::new("Test")
+            .page("/search", |ctx: RequestContext| {
+                let q = ctx.query_param("q").unwrap_or_default();
+                PageResponse::Ok(format!("query={}", q))
+            });
+
+        let client = app.test_client();
+        let resp = client.get("/search?q=hello&page=1").await;
+        assert!(resp.text().contains("query=hello"));
+    }
+
+    #[tokio::test]
+    async fn test_request_headers() {
+        let app = App::new("Test")
+            .page("/headers", |ctx: RequestContext| {
+                let auth = ctx.header("x-custom").unwrap_or("none");
+                PageResponse::Ok(format!("custom={}", auth))
+            });
+
+        let client = app.test_client();
+        let resp = client.request(
+            Method::GET,
+            "/headers",
+            vec![("x-custom", "myvalue")],
+            None,
+        ).await;
+        assert!(resp.text().contains("custom=myvalue"));
+    }
+
+    #[tokio::test]
+    async fn test_put_and_delete() {
+        let app = App::new("Test")
+            .put("/items/:id", |ctx: RequestContext| {
+                let id = ctx.param("id").to_string();
+                PageResponse::Json(serde_json::json!({"updated": id}))
+            })
+            .delete("/items/:id", |ctx: RequestContext| {
+                let id = ctx.param("id").to_string();
+                PageResponse::Json(serde_json::json!({"deleted": id}))
+            });
+
+        let client = app.test_client();
+
+        let resp = client.put("/items/42", "{}").await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json: serde_json::Value = resp.json();
+        assert_eq!(json["updated"], "42");
+
+        let resp = client.delete("/items/42").await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json: serde_json::Value = resp.json();
+        assert_eq!(json["deleted"], "42");
     }
 }

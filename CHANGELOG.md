@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.0] - 2026-05-27
+
+### Added
+
+#### adapto_app — Full HTTP support
+- **POST/PUT/DELETE/PATCH routes** — `.post()`, `.put()`, `.delete()`, `.patch()` methods on App builder. (`lib.rs`)
+- **Async handlers** — `async_page()`, `async_post()`, `async_put()`, `async_delete()`, `async_patch()` for handlers that need `await`. (`lib.rs`)
+- **Request body/headers/method** — `RequestContext` now exposes `method()`, `header()`, `headers()`, `body_json()`, `body_bytes()`, `body_str()`, `cookie()`, `remote_addr()`, `query_param()`, `query_pairs()`. (`lib.rs`)
+- **PageResponse::Json** — return JSON responses with automatic `Content-Type: application/json`. (`lib.rs`)
+- **PageResponse::BadRequest/Forbidden/InternalError** — proper HTTP status codes 400/403/500. (`lib.rs`)
+- **PageResponse::Custom** — arbitrary status code, content type, headers. (`lib.rs`)
+- **PageResponse::json()** — serialize any `Serialize` type to JSON response. (`lib.rs`)
+- **PageResponse::with_status()** — custom status code with HTML body. (`lib.rs`)
+- **PageResponse::raw()** — custom status, body, and content type. (`lib.rs`)
+- **Middleware support** — `.with_middleware()` to add tower layers (CORS, compression, auth). (`lib.rs`)
+- **Static file serving** — `.static_dir("/static", "./public")` via tower-http ServeDir. (`lib.rs`)
+- **Graceful shutdown** — Ctrl+C and SIGTERM handling with connection drain. (`lib.rs`)
+- **Shutdown hooks** — `.on_shutdown()` to run cleanup on graceful shutdown. (`lib.rs`)
+- **Health check endpoint** — `.health_check("/health")` returns 200 "ok". (`lib.rs`)
+- **Error handler** — `.error_handler()` for custom error page rendering. (`lib.rs`)
+- **TestClient** — `app.test_client()` for HTTP testing without TCP binding. Supports `.get()`, `.post()`, `.put()`, `.delete()`, `.request()`. (`lib.rs`)
+- **Environment config** — `.from_env()` reads `PORT`, `BIND_ADDR`, `STORE_PATH` from env vars. (`lib.rs`)
+- **Localized POST** — `.localized_post()` for multilingual POST routes. (`lib.rs`)
+- **URL decoding** — `query_param()` and `query_pairs()` with proper percent-decoding. (`lib.rs`)
+
+### Changed
+
+#### adapto_app
+- **`index_page()` signature** — now takes `Fn(RequestContext) -> R` instead of `Fn(Arc<AppState>) -> String`. **Breaking change.** (`lib.rs`)
+- **`get_route()` signature** — now takes `Fn(RequestContext) -> String` instead of `Fn(Arc<AppState>) -> String`. (`lib.rs`)
+- **Internal handler type** — unified `BoxHandler` type (async-first) replaces `RouteHandler` enum. (`lib.rs`)
+- **`App::build()`** — extracted router construction into public `build()` method for testing. (`lib.rs`)
+
+### Dependencies
+- Added `tower` and `tower-http` (CORS, static files) to adapto_app.
+
 ## [0.1.2] - 2026-05-26
 
 ### Documentation
