@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.1] - 2026-05-27
+
+### Added
+
+#### adapto_ui — New components
+- **Textarea** — multiline text input builder with rows, placeholder, error, required, ARIA. (`components.rs`)
+- **Select** — dropdown select builder with options, placeholder, selected value, error/disabled. (`components.rs`)
+- **Form** — form wrapper builder with action, method, child composition. (`components.rs`)
+- **Table** — data table builder with headers, rows, caption, striped/hoverable/compact variants. Wrapped in responsive container. (`components.rs`)
+- **Modal** — dialog builder with title, body, footer, close button, `role="dialog"`, `aria-modal`, `aria-labelledby`. Focus trap via `data-modal`/`data-modal-close`. (`components.rs`)
+- **Pagination** — page navigator with ellipsis, prev/next, `aria-current="page"`. Configurable base URL and param name. (`components.rs`)
+- **Toast** — notification builder (info/success/warning/error) with auto-dismiss duration, inline close button. (`components.rs`)
+- **Skeleton** — loading placeholder: `.text(lines)`, `.card()`, `.circle()`, `.rect(w, h)`. CSS animation class. (`components.rs`)
+
+#### adapto_ui — DX enhancements
+- **`.id()`, `.class()`, `.attr()`** — all components now support custom id, extra CSS classes, and arbitrary HTML attributes. (`components.rs`)
+- **Button `.action()` / `.data_id()`** — set `data-action` and `data-id` for live.js event handling. (`components.rs`)
+- **Button `.href()`** — renders `<a>` instead of `<button>`, visually identical. (`components.rs`)
+- **FormGroup `.input_id()`** — links `<label for>`, help `id="{id}-help"`, error `id="{id}-error"` for full accessibility. (`components.rs`)
+- **Alert `.dismissible()`** — adds inline close button with `onclick` dismiss. (`components.rs`)
+- **Progress `.indeterminate()`** — constructor for unknown-duration progress bars. (`components.rs`)
+- **AvatarSize enum** — `.small()` / `.large()` methods replace raw CSS class string in `.size()`. Old `.size(&str)` kept for backward compat. (`components.rs`)
+- **Breadcrumb `<nav>`** — wrapped in `<nav aria-label="Breadcrumb">`. (`components.rs`)
+
+### Changed
+
+#### adapto_ui
+- **51 → 93 tests** — 42 new tests covering all new components and DX features. (`components.rs`)
+
 ## [0.2.0] - 2026-05-27
 
 ### Added

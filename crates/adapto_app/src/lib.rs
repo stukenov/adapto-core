@@ -43,6 +43,7 @@ pub use layout::{LayoutConfig, LIVE_JS};
 
 pub enum FallbackResponse {
     Html(String),
+    HtmlNotFound(String),
     Raw { body: String, content_type: &'static str },
     NotFound,
 }
@@ -1219,6 +1220,7 @@ impl App {
                 if let Some(ref fb) = custom_fb {
                     match fb(path.to_string()) {
                         FallbackResponse::Html(html) => return Html(html).into_response(),
+                        FallbackResponse::HtmlNotFound(html) => return (StatusCode::NOT_FOUND, Html(html)).into_response(),
                         FallbackResponse::Raw { body, content_type } => {
                             return (
                                 [(axum::http::header::CONTENT_TYPE, content_type)],
