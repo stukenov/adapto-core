@@ -33,6 +33,8 @@ rust-version = "1.75"
 authors = ["Saken Tukenov <saken@tukenov.kz>"]
 repository = "https://github.com/stukenov/adapto-core"
 homepage = "https://github.com/stukenov/adapto-core"
+keywords = ["web-framework", "document-database", "ssr", "template-engine"]
+categories = ["web-programming", "database"]
 
 [workspace.dependencies]
 # Async runtime

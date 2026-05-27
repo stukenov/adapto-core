@@ -6,6 +6,8 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 description = "App builder for Adapto — declarative routes, async handlers, middleware, static files, WebSocket"
 readme = "README.md"
 

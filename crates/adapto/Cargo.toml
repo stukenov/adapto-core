@@ -7,6 +7,8 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 default = ["app", "ui", "forms", "auth", "audit", "macros", "live"]
