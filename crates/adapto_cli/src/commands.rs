@@ -57,10 +57,10 @@ pub enum GenerateCommand {
 
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
-pub fn run(cli: Cli) -> Result<(), CliError> {
+pub async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Commands::New { name } => cmd_new(&name),
-        Commands::Dev { port, host } => cmd_dev(&host, port),
+        Commands::Dev { port, host } => cmd_dev(&host, port).await,
         Commands::Build { release } => cmd_build(release),
         Commands::Check => cmd_check(),
         Commands::Generate { resource } => cmd_generate(resource),
@@ -180,28 +180,58 @@ strategy = "subdomain"
 
 // ── dev ─────────────────────────────────────────────────────────────────────
 
-fn cmd_dev(host: &str, port: u16) -> Result<(), CliError> {
-    let file_count = parse_project()?;
+async fn cmd_dev(host: &str, port: u16) -> Result<(), CliError> {
+    let project = compile_project(".")?;
 
-    println!("Adapto dev server running at http://{host}:{port}");
-    println!("Routes: {file_count}");
-    println!("Live reload: enabled");
-    println!("Security checks: passed");
+    let route_count = project.route_manifest.routes.len();
+    let resource_count = project.resource_managers.len();
+    let file_count = project.file_count;
+
+    let mut page_renderer = project.page_renderer;
+    for (id, graph) in &project.dependency_graphs {
+        page_renderer.register_dependency_graph(id, graph.clone());
+    }
+
+    let session_manager = adapto_live::manager::SessionManager::new(100);
+    let server = adapto_ssr::server::AdaptoServer::new(
+        page_renderer,
+        session_manager,
+        20,
+        b"adapto-dev-secret".to_vec(),
+    );
+
+    println!("Adapto dev server starting...");
+    println!("  Files:     {file_count}");
+    println!("  Routes:    {route_count}");
+    println!("  Resources: {resource_count}");
+    println!();
+    println!("  http://{host}:{port}");
     println!();
     println!("Press Ctrl+C to stop.");
 
-    // In a real implementation this starts an axum server with
-    // file watching, WebSocket live‑reload, and HMR. For now we
-    // report success after validating all .adapto sources parse.
-    Ok(())
+    server
+        .serve(host, port)
+        .await
+        .map_err(|e| CliError::IoError(e.to_string()))
 }
 
 // ── build ───────────────────────────────────────────────────────────────────
 
 fn cmd_build(release: bool) -> Result<(), CliError> {
-    let file_count = parse_project()?;
+    let project = compile_project(".")?;
     let mode = if release { "release" } else { "debug" };
-    println!("Build complete ({mode}). {file_count} component(s) compiled.");
+
+    println!("Build complete ({mode}).");
+    println!("  Files:      {}", project.file_count);
+    println!("  Components: {}", project.component_irs.len());
+    println!("  Routes:     {}", project.route_manifest.routes.len());
+    println!("  Resources:  {}", project.resource_managers.len());
+    println!();
+
+    for route in &project.route_manifest.routes {
+        println!("  {} {} [{}]", route.method, route.path, route.auth);
+    }
+
     Ok(())
 }
 
@@ -371,6 +401,12 @@ fn cmd_doctor() -> Result<(), CliError> {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+/// Compile all `.adapto` files in the project directory via ProjectLoader.
+fn compile_project(path: &str) -> Result<adapto_ssr::project::CompiledProject, CliError> {
+    adapto_ssr::project::ProjectLoader::load_project(path, b"adapto-dev-secret")
+        .map_err(|e| CliError::CompileError(e.to_string()))
+}
 
 /// Recursively discover all `.adapto` files under the current directory.
 pub fn find_adapto_files() -> Result<Vec<String>, CliError> {

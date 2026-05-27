@@ -92,13 +92,17 @@ name = "adapto_cli"
 version = "0.2.3"
 dependencies = [
  "adapto_compiler",
+ "adapto_live",
  "adapto_parser",
  "adapto_runtime",
+ "adapto_ssr",
+ "adapto_store",
  "clap",
  "insta",
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]

@@ -103,8 +103,8 @@ fn tmp_dir(test_name: &str) -> PathBuf {
     dir
 }
 
-#[test]
-fn cmd_new_creates_project_structure() {
+#[tokio::test]
+async fn cmd_new_creates_project_structure() {
     let base = tmp_dir("new_structure");
     let project = base.join("demo");
     let project_str = project.to_string_lossy().to_string();
@@ -114,6 +114,7 @@ fn cmd_new_creates_project_structure() {
             name: project_str,
         },
     })
+    .await
     .expect("cmd_new should succeed");
 
     assert!(project.join("app").is_dir());
@@ -124,8 +125,8 @@ fn cmd_new_creates_project_structure() {
     assert!(project.join("tests").is_dir());
 }
 
-#[test]
-fn cmd_new_creates_adapto_toml() {
+#[tokio::test]
+async fn cmd_new_creates_adapto_toml() {
     let base = tmp_dir("new_toml");
     let project = base.join("myapp");
     let project_str = project.to_string_lossy().to_string();
@@ -135,6 +136,7 @@ fn cmd_new_creates_adapto_toml() {
             name: project_str,
         },
     })
+    .await
     .expect("cmd_new should succeed");
 
     let toml = fs::read_to_string(project.join("adapto.toml")).expect("read adapto.toml");
@@ -144,8 +146,8 @@ fn cmd_new_creates_adapto_toml() {
     assert!(toml.contains("[tenant]"));
 }
 
-#[test]
-fn cmd_new_creates_root_page() {
+#[tokio::test]
+async fn cmd_new_creates_root_page() {
     let base = tmp_dir("new_page");
     let project = base.join("proj");
     let project_str = project.to_string_lossy().to_string();
@@ -155,6 +157,7 @@ fn cmd_new_creates_root_page() {
             name: project_str,
         },
     })
+    .await
     .expect("cmd_new should succeed");
 
     let page = fs::read_to_string(project.join("app/page.adapto")).expect("read page.adapto");
@@ -163,8 +166,8 @@ fn cmd_new_creates_root_page() {
     assert!(page.contains("<template>"));
 }
 
-#[test]
-fn cmd_new_creates_layout() {
+#[tokio::test]
+async fn cmd_new_creates_layout() {
     let base = tmp_dir("new_layout");
     let project = base.join("proj");
     let project_str = project.to_string_lossy().to_string();
@@ -174,6 +177,7 @@ fn cmd_new_creates_layout() {
             name: project_str,
         },
     })
+    .await
     .expect("cmd_new should succeed");
 
     let layout =
@@ -182,9 +186,9 @@ fn cmd_new_creates_layout() {
     assert!(layout.contains("<slot />"));
 }
 
-#[test]
+#[tokio::test]
 #[ignore] // uses set_current_dir which races with parallel tests; run with --ignored
-fn cmd_generate_creates_resource_file() {
+async fn cmd_generate_creates_resource_file() {
     let base = tmp_dir("gen_resource");
     std::env::set_current_dir(&base).unwrap();
 
@@ -195,6 +199,7 @@ fn cmd_generate_creates_resource_file() {
             },
         },
     })
+    .await
     .expect("cmd_generate should succeed");
 
     let resource =

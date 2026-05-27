@@ -9,6 +9,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+#### Phase 7: CLI dev & build Commands
+- **`cmd_dev` real implementation** — async, compiles project via `ProjectLoader`, registers dependency graphs, constructs `AdaptoServer`, starts HTTP+WS server. Reports file/route/resource counts. (`commands.rs`)
+- **`cmd_build` real implementation** — compiles project, validates all files, reports manifest with routes listing (method, path, auth). (`commands.rs`)
+- **`compile_project()` helper** — wraps `ProjectLoader::load_project()` with CLI error mapping. (`commands.rs`)
+- **Async main** — `#[tokio::main]` for dev server startup. (`main.rs`)
+- **CLI deps** — added `adapto_ssr`, `adapto_store`, `adapto_live`, `tokio`. (`Cargo.toml`)
+- **Async test migration** — 6 tests converted from `#[test]` to `#[tokio::test]` for async `run()`. (`cli_tests.rs`)
+
 #### Phase 6: WS Session Lifecycle
 - **`init_state_from_defaults()`** — LiveSession method parses `StateFieldIR.default` values as JSON and populates StateStore, clearing dirty flags after init. (`session.rs`)
 - **Auto-session creation** — `process_ws_message()` auto-creates LiveSession from pending session map when session not found on WS connect. Uses PageRenderer component/graph lookup. (`server.rs`)
