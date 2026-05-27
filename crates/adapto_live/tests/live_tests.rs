@@ -902,3 +902,326 @@ fn test_validate_form_event_empty_component_passes() {
     };
     assert!(validate_form_event(&event).is_ok());
 }
+
+// ===========================================================================
+// Phase 6: WS Session Lifecycle
+// ===========================================================================
+
+fn make_ir_with_defaults() -> ComponentIR {
+    ComponentIR {
+        id: "counter_comp".to_string(),
+        name: "Counter".to_string(),
+        route: None,
+        static_segments: vec!["<div>".to_string(), "</div>".to_string()],
+        dynamic_segments: vec![
+            DynamicSegment::new(
+                "dyn_0".to_string(),
+                "count".to_string(),
+                vec!["count".to_string()],
+                SegmentType::Text,
+            ),
+            DynamicSegment::new(
+                "dyn_1".to_string(),
+                "name".to_string(),
+                vec!["name".to_string()],
+                SegmentType::Text,
+            ),
+        ],
+        events: vec![],
+        actions: vec![ActionIR {
+            name: "increment".into(),
+            body: "count += 1".into(),
+            permission: None,
+            is_async: false,
+            params: vec![],
+            audit: None,
+        }],
+        state_fields: vec![
+            StateFieldIR {
+                name: "count".into(),
+                ty: "i64".into(),
+                default: Some("0".into()),
+                secret: false,
+            },
+            StateFieldIR {
+                name: "name".into(),
+                ty: "String".into(),
+                default: Some("\"World\"".into()),
+                secret: false,
+            },
+        ],
+        form_schemas: vec![],
+        permissions: vec![],
+        children: vec![],
+        is_island: false,
+        style: None,
+    }
+}
+
+#[test]
+fn phase6_init_state_from_defaults() {
+    let ir = make_ir_with_defaults();
+    let mut session = make_session_from_ir(ir);
+    session.init_state_from_defaults();
+
+    assert_eq!(session.state.get("count"), Some(&serde_json::json!(0)));
+    assert_eq!(session.state.get("name"), Some(&serde_json::json!("World")));
+    assert!(!session.state.is_dirty("count"), "dirty cleared after init");
+}
+
+#[test]
+fn phase6_init_state_partial_defaults() {
+    let mut ir = make_ir_with_defaults();
+    ir.state_fields[1].default = None;
+    let mut session = make_session_from_ir(ir);
+    session.init_state_from_defaults();
+
+    assert_eq!(session.state.get("count"), Some(&serde_json::json!(0)));
+    assert_eq!(session.state.get("name"), None);
+}
+
+#[test]
+fn phase6_event_after_init_generates_patches() {
+    let ir = make_ir_with_defaults();
+    let graph = build_graph_for_ir(&ir);
+    let mut session = LiveSession::new(
+        SessionId::from("s1"),
+        None,
+        None,
+        RouteId::from("/test"),
+        ir,
+        graph,
+        PermissionSet::new(),
+    );
+    session.init_state_from_defaults();
+
+    let event = ClientEvent {
+        session: "s1".into(),
+        component: "counter_comp".into(),
+        event: "click".into(),
+        handler: "increment".into(),
+        payload: HashMap::new(),
+        seq: 1,
+    };
+
+    let patches = session.handle_event(&event).unwrap();
+    assert!(!patches.ops.is_empty(), "should generate patches");
+    let text_patch = patches.ops.iter().find(|op| matches!(op, PatchOp::ReplaceText { target, .. } if target == "dyn_0"));
+    assert!(text_patch.is_some(), "should have replace_text for count");
+    if let Some(PatchOp::ReplaceText { value, .. }) = text_patch {
+        assert_eq!(value, "1");
+    }
+}
+
+#[test]
+fn phase6_multiple_events_increment_state() {
+    let ir = make_ir_with_defaults();
+    let graph = build_graph_for_ir(&ir);
+    let mut session = LiveSession::new(
+        SessionId::from("s2"),
+        None,
+        None,
+        RouteId::from("/test"),
+        ir,
+        graph,
+        PermissionSet::new(),
+    );
+    session.init_state_from_defaults();
+
+    let event = ClientEvent {
+        session: "s2".into(),
+        component: "counter_comp".into(),
+        event: "click".into(),
+        handler: "increment".into(),
+        payload: HashMap::new(),
+        seq: 1,
+    };
+
+    session.handle_event(&event).unwrap();
+    session.handle_event(&event).unwrap();
+    let patches = session.handle_event(&event).unwrap();
+
+    let text_patch = patches.ops.iter().find(|op| matches!(op, PatchOp::ReplaceText { target, .. } if target == "dyn_0"));
+    if let Some(PatchOp::ReplaceText { value, .. }) = text_patch {
+        assert_eq!(value, "3");
+    }
+}
+
+#[test]
+fn phase6_session_expiry() {
+    let ir = make_ir_with_defaults();
+    let mut session = make_session_from_ir(ir);
+    session.last_event_at = chrono::Utc::now() - chrono::Duration::seconds(400);
+
+    assert!(session.is_expired(std::time::Duration::from_secs(300)));
+    assert!(!session.is_expired(std::time::Duration::from_secs(500)));
+}
+
+#[test]
+fn phase6_session_touch_prevents_expiry() {
+    let ir = make_ir_with_defaults();
+    let mut session = make_session_from_ir(ir);
+    session.last_event_at = chrono::Utc::now() - chrono::Duration::seconds(400);
+    assert!(session.is_expired(std::time::Duration::from_secs(300)));
+
+    session.handle_event(&ClientEvent {
+        session: "s".into(),
+        component: "c".into(),
+        event: "click".into(),
+        handler: "increment".into(),
+        payload: HashMap::new(),
+        seq: 1,
+    }).unwrap();
+
+    assert!(!session.is_expired(std::time::Duration::from_secs(300)));
+}
+
+#[test]
+fn phase6_session_manager_add_and_dispatch() {
+    let ir = make_ir_with_defaults();
+    let graph = build_graph_for_ir(&ir);
+    let mut session = LiveSession::new(
+        SessionId::from("ws-1"),
+        None,
+        None,
+        RouteId::from("/"),
+        ir,
+        graph,
+        PermissionSet::new(),
+    );
+    session.init_state_from_defaults();
+
+    let mgr = SessionManager::new(10);
+    mgr.add(session).unwrap();
+    assert!(mgr.has(&SessionId::from("ws-1")));
+
+    let result = mgr.with_session(&SessionId::from("ws-1"), |s| {
+        s.state.get("count").cloned()
+    });
+    assert_eq!(result.unwrap(), Some(serde_json::json!(0)));
+}
+
+#[test]
+fn phase6_cleanup_removes_expired() {
+    let ir = make_ir_with_defaults();
+    let mut session = make_session_from_ir(ir);
+    session.id = SessionId::from("expired-1");
+    session.last_event_at = chrono::Utc::now() - chrono::Duration::seconds(600);
+
+    let mgr = SessionManager::new(10);
+    mgr.add(session).unwrap();
+    assert_eq!(mgr.count(), 1);
+
+    let removed = mgr.cleanup_expired(std::time::Duration::from_secs(300));
+    assert_eq!(removed, 1);
+    assert_eq!(mgr.count(), 0);
+}
+
+#[test]
+fn phase6_dispatcher_heartbeat_ack() {
+    let ir = make_ir_with_defaults();
+    let mut session = make_session_from_ir(ir);
+    session.init_state_from_defaults();
+
+    let mut dispatcher = EventDispatcher::new(100);
+    let payload = ClientPayload::Heartbeat(HeartbeatEvent {
+        session: "s".into(),
+        seq: 42,
+    });
+
+    let result = dispatcher.dispatch(&mut session, &payload).unwrap();
+    match result {
+        ServerPayload::HeartbeatAck(ack) => assert_eq!(ack.seq, 42),
+        _ => panic!("expected HeartbeatAck"),
+    }
+}
+
+#[test]
+fn phase6_dispatcher_event_returns_patch() {
+    let ir = make_ir_with_defaults();
+    let graph = build_graph_for_ir(&ir);
+    let mut session = LiveSession::new(
+        SessionId::from("d1"),
+        None,
+        None,
+        RouteId::from("/"),
+        ir,
+        graph,
+        PermissionSet::new(),
+    );
+    session.init_state_from_defaults();
+
+    let mut dispatcher = EventDispatcher::new(100);
+    let payload = ClientPayload::Event(ClientEvent {
+        session: "d1".into(),
+        component: "counter_comp".into(),
+        event: "click".into(),
+        handler: "increment".into(),
+        payload: HashMap::new(),
+        seq: 1,
+    });
+
+    let result = dispatcher.dispatch(&mut session, &payload).unwrap();
+    match result {
+        ServerPayload::Patch(p) => {
+            assert!(!p.ops.is_empty());
+        }
+        _ => panic!("expected Patch"),
+    }
+}
+
+#[test]
+fn phase6_seq_monotonically_increases() {
+    let ir = make_ir_with_defaults();
+    let graph = build_graph_for_ir(&ir);
+    let mut session = LiveSession::new(
+        SessionId::from("seq"),
+        None,
+        None,
+        RouteId::from("/"),
+        ir,
+        graph,
+        PermissionSet::new(),
+    );
+    session.init_state_from_defaults();
+
+    let event = ClientEvent {
+        session: "seq".into(),
+        component: "c".into(),
+        event: "click".into(),
+        handler: "increment".into(),
+        payload: HashMap::new(),
+        seq: 1,
+    };
+
+    let p1 = session.handle_event(&event).unwrap();
+    let p2 = session.handle_event(&event).unwrap();
+    let p3 = session.handle_event(&event).unwrap();
+
+    assert_eq!(p1.seq, 1);
+    assert_eq!(p2.seq, 2);
+    assert_eq!(p3.seq, 3);
+}
+
+fn make_session_from_ir(ir: ComponentIR) -> LiveSession {
+    let graph = build_graph_for_ir(&ir);
+    LiveSession::new(
+        SessionId::from("test-session"),
+        None,
+        None,
+        RouteId::from("/test"),
+        ir,
+        graph,
+        PermissionSet::new(),
+    )
+}
+
+fn build_graph_for_ir(ir: &ComponentIR) -> DependencyGraph {
+    let mut graph = DependencyGraph::default();
+    for seg in &ir.dynamic_segments {
+        for dep in &seg.deps {
+            graph.add_dependency(&seg.id, dep);
+        }
+    }
+    graph
+}

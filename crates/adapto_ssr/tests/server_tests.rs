@@ -14,6 +14,7 @@ fn test_app_state() -> Arc<AppState> {
         session_manager: SessionManager::new(10),
         event_dispatcher: std::sync::Mutex::new(EventDispatcher::new(100)),
         secret: b"integration-secret".to_vec(),
+        pending_sessions: std::sync::RwLock::new(std::collections::HashMap::new()),
     })
 }
 

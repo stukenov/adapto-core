@@ -353,7 +353,7 @@ fn renderer_page_wrapping_bootstrap() {
     let ir = static_ir("boot", "BootPage");
     let state = StateStore::new();
 
-    let html = renderer.render_page(&ir, &state, None).unwrap();
+    let (html, _) = renderer.render_page(&ir, &state, None).unwrap();
     assert!(html.contains("id=\"__ADAPTO_BOOTSTRAP__\""));
     assert!(html.contains("\"session_id\""));
     assert!(html.contains("\"websocket_url\""));
@@ -367,7 +367,7 @@ fn renderer_page_wrapping_client_js() {
     let ir = static_ir("js", "JsPage");
     let state = StateStore::new();
 
-    let html = renderer.render_page(&ir, &state, None).unwrap();
+    let (html, _) = renderer.render_page(&ir, &state, None).unwrap();
     assert!(html.contains("<script src=\"/assets/adapto-client.js\"></script>"));
 }
 
@@ -591,7 +591,7 @@ fn renderer_page_with_layout() {
     let state = StateStore::new();
 
     let layout = "<html><body><nav>N</nav>{slot}<footer>F</footer></body></html>";
-    let html = renderer.render_page(&ir, &state, Some(layout)).unwrap();
+    let (html, _) = renderer.render_page(&ir, &state, Some(layout)).unwrap();
     assert!(html.contains("<nav>N</nav>"));
     assert!(html.contains("<h1>LaidPage</h1>"));
     assert!(html.contains("<footer>F</footer>"));
@@ -1366,7 +1366,7 @@ fn phase5_bootstrap_websocket_url_simple() {
     let renderer = Renderer::new(b"secret");
     let ir = static_ir("ws_test", "WsTest");
     let state = StateStore::new();
-    let html = renderer.render_page(&ir, &state, None).unwrap();
+    let (html, _) = renderer.render_page(&ir, &state, None).unwrap();
     assert!(html.contains("\"/ws\""), "websocket_url should be /ws without session_id");
 }
 

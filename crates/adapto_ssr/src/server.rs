@@ -13,7 +13,9 @@ use adapto_client_protocol::message;
 use adapto_client_protocol::patch::{ErrorMessage, ServerMessage, ServerPayload};
 use adapto_live::handler::EventDispatcher;
 use adapto_live::manager::SessionManager;
-use adapto_runtime::types::SessionId;
+use adapto_live::session::LiveSession;
+use adapto_runtime::context::PermissionSet;
+use adapto_runtime::types::{RouteId, SessionId};
 
 use crate::page::PageRenderer;
 
@@ -33,6 +35,8 @@ pub struct AppState {
     pub session_manager: SessionManager,
     pub event_dispatcher: std::sync::Mutex<EventDispatcher>,
     pub secret: Vec<u8>,
+    /// Maps session_id → route_id for sessions created during SSR page render.
+    pub pending_sessions: std::sync::RwLock<std::collections::HashMap<String, String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +70,7 @@ impl AdaptoServer {
             session_manager,
             event_dispatcher: std::sync::Mutex::new(EventDispatcher::new(event_rate_limit)),
             secret,
+            pending_sessions: std::sync::RwLock::new(std::collections::HashMap::new()),
         });
 
         Self { state }
@@ -101,6 +106,31 @@ impl AdaptoServer {
         let router = self.router();
         let addr = format!("{}:{}", host, port);
         let listener = TcpListener::bind(&addr).await?;
+
+        // Spawn background cleanup task for expired sessions.
+        let cleanup_state = self.state.clone();
+        tokio::spawn(async move {
+            let timeout = std::time::Duration::from_secs(300);
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                let removed = cleanup_state.session_manager.cleanup_expired(timeout);
+                if removed > 0 {
+                    tracing::debug!("Cleaned up {} expired sessions", removed);
+                }
+                // Also clean stale pending sessions (older than 5 minutes not claimed).
+                if let Ok(mut pending) = cleanup_state.pending_sessions.write() {
+                    let max_pending = 10000;
+                    if pending.len() > max_pending {
+                        let drain_count = pending.len() - max_pending;
+                        let keys: Vec<_> = pending.keys().take(drain_count).cloned().collect();
+                        for k in keys {
+                            pending.remove(&k);
+                        }
+                    }
+                }
+            }
+        });
 
         tracing::info!("Adapto server listening on {}", addr);
 
@@ -150,6 +180,9 @@ async fn handle_page(
 
     match state.page_renderer.render_request(&full_path, &ctx, state_store) {
         Ok(response) => {
+            if let Ok(mut pending) = state.pending_sessions.write() {
+                pending.insert(response.session_id.clone(), response.route_id.clone());
+            }
             (StatusCode::from_u16(response.status).unwrap_or(StatusCode::OK), Html(response.html))
                 .into_response()
         }
@@ -268,7 +301,20 @@ fn process_ws_message(text: &str, state: &AppState) -> ServerMessage {
     let session_id_str = extract_session_id(&client_msg.payload);
     let session_id = SessionId::from(session_id_str.as_str());
 
-    // 4. Dispatch the event to the session via EventDispatcher.
+    // 4. Auto-create session if it doesn't exist and we have a pending registration.
+    if !state.session_manager.has(&session_id) {
+        if let Some(session) = create_session_from_pending(state, &session_id_str) {
+            if let Err(e) = state.session_manager.add(session) {
+                return ServerMessage::new(ServerPayload::Error(ErrorMessage {
+                    seq: None,
+                    code: "SESSION_CREATE_ERROR".into(),
+                    message: format!("{}", e),
+                }));
+            }
+        }
+    }
+
+    // 5. Dispatch the event to the session via EventDispatcher.
     let dispatch_result = state.session_manager.with_session(&session_id, |session| {
         let mut dispatcher = state.event_dispatcher.lock().unwrap();
         dispatcher.dispatch(session, &client_msg.payload)
@@ -287,6 +333,34 @@ fn process_ws_message(text: &str, state: &AppState) -> ServerMessage {
             message: format!("{}", live_err),
         })),
     }
+}
+
+/// Create a LiveSession from a pending session registration.
+fn create_session_from_pending(state: &AppState, session_id_str: &str) -> Option<LiveSession> {
+    let route_id = {
+        let mut pending = state.pending_sessions.write().ok()?;
+        pending.remove(session_id_str)?
+    };
+
+    let ir = state.page_renderer.get_component(&route_id)?.clone();
+    let graph = state
+        .page_renderer
+        .get_dependency_graph(&route_id)
+        .cloned()
+        .unwrap_or_default();
+
+    let session_id = SessionId::from(session_id_str);
+    let mut session = LiveSession::new(
+        session_id,
+        None,
+        None,
+        RouteId::from(route_id.as_str()),
+        ir,
+        graph,
+        PermissionSet::new(),
+    );
+    session.init_state_from_defaults();
+    Some(session)
 }
 
 /// Extract the session identifier from any client payload variant.
@@ -347,6 +421,7 @@ mod tests {
             session_manager: SessionManager::new(10),
             event_dispatcher: std::sync::Mutex::new(EventDispatcher::new(100)),
             secret: b"test-secret".to_vec(),
+            pending_sessions: std::sync::RwLock::new(std::collections::HashMap::new()),
         })
     }
 

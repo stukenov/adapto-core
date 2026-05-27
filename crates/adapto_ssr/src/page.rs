@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use adapto_compiler::dependency::DependencyGraph;
 use adapto_compiler::ir::ComponentIR;
 use adapto_runtime::context::Ctx;
 use adapto_runtime::state::StateStore;
@@ -20,6 +21,7 @@ pub struct PageRenderer {
     router: Option<Router>,
     layouts: LayoutManager,
     components: HashMap<String, ComponentIR>,
+    dependency_graphs: HashMap<String, DependencyGraph>,
 }
 
 /// The fully rendered page response, ready to send to the client.
@@ -27,6 +29,10 @@ pub struct PageRenderer {
 pub struct PageResponse {
     /// Complete HTML document.
     pub html: String,
+    /// Session ID embedded in the bootstrap payload.
+    pub session_id: String,
+    /// Route ID for the matched route.
+    pub route_id: String,
     /// HTTP status code.
     pub status: u16,
     /// The matched route metadata.
@@ -40,6 +46,7 @@ impl PageRenderer {
             router: None,
             layouts: LayoutManager::new(),
             components: HashMap::new(),
+            dependency_graphs: HashMap::new(),
         }
     }
 
@@ -53,6 +60,25 @@ impl PageRenderer {
 
     pub fn register_component(&mut self, id: &str, ir: ComponentIR) {
         self.components.insert(id.to_string(), ir);
+    }
+
+    pub fn register_dependency_graph(&mut self, id: &str, graph: DependencyGraph) {
+        self.dependency_graphs.insert(id.to_string(), graph);
+    }
+
+    /// Look up a component IR by route ID.
+    pub fn get_component(&self, route_id: &str) -> Option<&ComponentIR> {
+        self.components.get(route_id)
+    }
+
+    /// Look up a dependency graph by route ID.
+    pub fn get_dependency_graph(&self, route_id: &str) -> Option<&DependencyGraph> {
+        self.dependency_graphs.get(route_id)
+    }
+
+    /// Match a URL path and return the route match.
+    pub fn match_route(&self, path: &str) -> Option<RouteMatch> {
+        self.router.as_ref()?.match_route(path)
     }
 
     /// Handle a page request through the full rendering pipeline.
@@ -121,7 +147,7 @@ impl PageRenderer {
             })
             .flatten();
 
-        let html = self.renderer.render_page(
+        let (html, session_id) = self.renderer.render_page(
             ir,
             &initial_state,
             layout_template.as_deref(),
@@ -130,6 +156,8 @@ impl PageRenderer {
         // 6. Response.
         Ok(PageResponse {
             html,
+            session_id,
+            route_id: route_match.route_id.clone(),
             status: 200,
             route_match,
         })

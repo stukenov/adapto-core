@@ -55,6 +55,18 @@ impl LiveSession {
         }
     }
 
+    /// Initialize state from component IR defaults.
+    pub fn init_state_from_defaults(&mut self) {
+        for field in &self.component_ir.state_fields {
+            if let Some(ref default_str) = field.default {
+                let value = serde_json::from_str(default_str)
+                    .unwrap_or_else(|_| serde_json::Value::String(default_str.clone()));
+                self.state.set(&field.name, value);
+            }
+        }
+        self.state.clear_dirty();
+    }
+
     /// Register an action handler by name.
     pub fn register_handler(&mut self, name: &str, handler: ActionHandler) {
         self.action_handlers.insert(name.to_string(), handler);

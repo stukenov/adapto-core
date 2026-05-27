@@ -9,6 +9,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+#### Phase 6: WS Session Lifecycle
+- **`init_state_from_defaults()`** — LiveSession method parses `StateFieldIR.default` values as JSON and populates StateStore, clearing dirty flags after init. (`session.rs`)
+- **Auto-session creation** — `process_ws_message()` auto-creates LiveSession from pending session map when session not found on WS connect. Uses PageRenderer component/graph lookup. (`server.rs`)
+- **Pending session store** — `AppState.pending_sessions` (RwLock HashMap) maps session_id→route_id, populated during SSR page render, consumed on WS connect. (`server.rs`)
+- **`render_page()` returns session_id** — now returns `(html, session_id)` tuple for session tracking. (`renderer.rs`, `page.rs`)
+- **PageRenderer route/component lookup** — added `get_component()`, `get_dependency_graph()`, `match_route()`, `register_dependency_graph()`. (`page.rs`)
+- **Background cleanup task** — `serve()` spawns tokio task: expired session cleanup every 60s (5min timeout), pending session overflow cap. (`server.rs`)
+- **11 Phase 6 tests** — state init from defaults/partial, event→patches after init, multiple increments, expiry, touch prevents expiry, manager add+dispatch, cleanup removes expired, heartbeat ack, event→patch dispatch, seq monotonicity. (`live_tests.rs`)
+
 #### Phase 5: JS Client Runtime
 - **adapto-client.js** — full client runtime (~400 LOC) replacing 22-line inline script. All 15 PatchOp handlers, WebSocket with exponential backoff reconnection + jitter, heartbeat keepalive, event delegation (click/input/change/submit/keydown/keyup/focus/blur), form serialization (text/checkbox/radio/select/multi-select), modifier support (prevent/stop/debounce/throttle), flash notification system with ARIA live region, modal dialog with Escape key + backdrop dismiss + focus trap, post-redirect flash via sessionStorage, public API via `window.__adapto`. (`static/adapto-client.js`)
 - **server.rs** — `handle_client_js()` now uses `include_str!` for static file instead of inline JS. (`server.rs`)

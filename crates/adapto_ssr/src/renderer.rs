@@ -32,12 +32,13 @@ impl Renderer {
 
     /// Render a full HTML page: component content wrapped in an optional
     /// layout, plus the bootstrap script block and client JS tag.
+    /// Render a full HTML page. Returns `(html, session_id)`.
     pub fn render_page(
         &self,
         ir: &ComponentIR,
         state: &StateStore,
         layout_html: Option<&str>,
-    ) -> Result<String, SsrError> {
+    ) -> Result<(String, String), SsrError> {
         let content = self.render_component(ir, state)?;
         let session_id = Uuid::new_v4().to_string();
         let bootstrap = self.generate_bootstrap(ir, &session_id);
@@ -48,7 +49,7 @@ impl Renderer {
             None => content,
         };
 
-        Ok(self.wrap_page(&page_content, &bootstrap, styles))
+        Ok((self.wrap_page(&page_content, &bootstrap, styles), session_id))
     }
 
     /// Render a single component to an HTML fragment.
@@ -586,7 +587,7 @@ mod tests {
         let ir = minimal_ir();
         let state = StateStore::new();
 
-        let html = renderer.render_page(&ir, &state, None).unwrap();
+        let (html, _) = renderer.render_page(&ir, &state, None).unwrap();
         assert!(html.contains("id=\"__ADAPTO_BOOTSTRAP__\""));
         assert!(html.contains("\"session_id\""));
         assert!(html.contains("\"csrf_token\""));
@@ -598,7 +599,7 @@ mod tests {
         let ir = minimal_ir();
         let state = StateStore::new();
 
-        let html = renderer.render_page(&ir, &state, None).unwrap();
+        let (html, _) = renderer.render_page(&ir, &state, None).unwrap();
         assert!(html.contains("src=\"/assets/adapto-client.js\""));
     }
 
@@ -620,7 +621,7 @@ mod tests {
         });
         let state = StateStore::new();
 
-        let html = renderer.render_page(&ir, &state, None).unwrap();
+        let (html, _) = renderer.render_page(&ir, &state, None).unwrap();
         assert!(html.contains("<style>.title { color: red; }</style>"));
     }
 }

@@ -100,12 +100,11 @@ async fn handle_page(State(app): State<Arc<App>>) -> impl IntoResponse {
     state.set("count", json!(0));
     state.clear_dirty();
 
-    let html = app
+    let (html, _session_id) = app
         .renderer
         .render_page(&app.ir, &state, None)
-        .unwrap_or_else(|e| format!("<h1>Error: {e}</h1>"));
+        .unwrap_or_else(|e| (format!("<h1>Error: {e}</h1>"), String::new()));
 
-    // Inject inline WS script that actually works (replacing the external client.js)
     let html = html.replace(
         "<script src=\"/assets/adapto-client.js\"></script>",
         &inline_client_script(),
