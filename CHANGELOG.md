@@ -9,6 +9,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+#### Phase 4: Project Loader + Auto-Discovery
+- **ProjectLoader** — `load_project(path, secret)` scans directory tree for `.adapto` files, parses and compiles all, registers components/routes/resources/layouts into a `CompiledProject` struct. Skips `.`-prefixed dirs, `target/`, `node_modules/`. (`project.rs`)
+- **CompiledProject** — holds `PageRenderer`, `LayoutManager`, `RouteManifest`, `ResourceManager` map, `DependencyGraph` map, `ComponentIR` map, file count. (`project.rs`)
+- **compiler→runtime ResourceIR conversion** — `compiler_to_runtime_resource()` bridges compiler and runtime ResourceIR types without cyclic dependency. (`project.rs`)
+- **template→HTML extraction** — `template_to_raw_html()` / `node_to_html()` recursively convert parser AST nodes to raw HTML for layout registration. (`project.rs`)
+- **5 project loader tests** — discover files, register routes, register resources, register components, empty dir error. (`project.rs`)
+- **adapto_store** added as dependency for `adapto_ssr`. (`Cargo.toml`)
+
 #### Phase 3: Resource → CRUD Pipeline
 - **ResourceIR** — compiled resource definition with fields, indexes, permissions, tenant scoping. Defined in both `adapto_compiler::ir` and `adapto_runtime::resource` (structurally identical, serde-compatible). (`ir.rs`, `resource.rs`)
 - **Compiler resource compilation** — `compile_resource()` transforms parser `ResourceBlock` → `ResourceIR` with field constraints, unique/searchable indexes, permission map. Added `resource_ir: Option<ResourceIR>` to `CompileOutput`. (`compiler.rs`)

@@ -11,6 +11,7 @@ adapto_runtime = { path = "../adapto_runtime" }
 adapto_client_protocol = { path = "../adapto_client_protocol" }
 adapto_auth = { path = "../adapto_auth" }
 adapto_live = { path = "../adapto_live" }
+adapto_store = { path = "../adapto_store" }
 axum = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

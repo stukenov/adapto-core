@@ -25,4 +25,7 @@ pub enum SsrError {
 
     #[error("State evaluation error: {0}")]
     StateError(String),
+
+    #[error("Project error: {0}")]
+    ProjectError(String),
 }
