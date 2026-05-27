@@ -1,8 +1,12 @@
 [package]
 name = "adapto_runtime"
+description = "Adapto runtime — state store, permissions, interpreter, resource manager"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 serde = { workspace = true }
@@ -10,7 +14,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-adapto_store = { path = "../adapto_store" }
+adapto_store = { path = "../adapto_store", version = "0.2.4" }
 
 [dev-dependencies]
 insta = { workspace = true }

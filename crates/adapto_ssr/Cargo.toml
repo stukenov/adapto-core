@@ -1,17 +1,21 @@
 [package]
 name = "adapto_ssr"
+description = "Adapto server-side rendering — renderer, router, project loader, HTTP server"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
-adapto_parser = { path = "../adapto_parser" }
-adapto_compiler = { path = "../adapto_compiler" }
-adapto_runtime = { path = "../adapto_runtime" }
-adapto_client_protocol = { path = "../adapto_client_protocol" }
-adapto_auth = { path = "../adapto_auth" }
-adapto_live = { path = "../adapto_live" }
-adapto_store = { path = "../adapto_store" }
+adapto_parser = { path = "../adapto_parser", version = "0.2.4" }
+adapto_compiler = { path = "../adapto_compiler", version = "0.2.4" }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.4" }
+adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.4" }
+adapto_auth = { path = "../adapto_auth", version = "0.2.4" }
+adapto_live = { path = "../adapto_live", version = "0.2.4" }
+adapto_store = { path = "../adapto_store", version = "0.2.4" }
 axum = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

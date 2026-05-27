@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "adapto"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_app",
  "adapto_audit",
@@ -23,7 +23,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_ai"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_runtime",
  "chrono",
@@ -40,7 +40,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_app"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_client_protocol",
  "adapto_store",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_audit"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_runtime",
  "chrono",
@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_auth"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_runtime",
  "base64",
@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_cli"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_compiler",
  "adapto_live",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_client_protocol"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "chrono",
  "insta",
@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_compiler"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_parser",
  "adapto_runtime",
@@ -134,7 +134,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_db"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_runtime",
  "chrono",
@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_forms"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_runtime",
  "chrono",
@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_live"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_audit",
  "adapto_auth",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_macros"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_store",
  "proc-macro2",
@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_parser"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "insta",
  "pest",
@@ -206,7 +206,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_runtime"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_store",
  "chrono",
@@ -219,7 +219,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_ssr"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_auth",
  "adapto_client_protocol",
@@ -243,7 +243,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_store"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "chrono",
  "memmap2",
@@ -258,7 +258,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_test_utils"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_audit",
  "adapto_auth",
@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "adapto_ui"
-version = "0.2.3"
+version = "0.2.4"
 
 [[package]]
 name = "aho-corasick"
@@ -625,7 +625,7 @@ dependencies = [
 
 [[package]]
 name = "example-counter"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_auth",
  "adapto_client_protocol",
@@ -642,7 +642,7 @@ dependencies = [
 
 [[package]]
 name = "example-customer-crm"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto",
  "adapto_app",
@@ -658,7 +658,7 @@ dependencies = [
 
 [[package]]
 name = "example-myqaz"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_app",
  "adapto_store",
@@ -670,7 +670,7 @@ dependencies = [
 
 [[package]]
 name = "example-school-ai"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "adapto_ai",
  "adapto_audit",

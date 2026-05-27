@@ -1,15 +1,19 @@
 [package]
 name = "adapto_live"
+description = "Adapto live runtime — session manager, event dispatch, patch generation"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
-adapto_runtime = { path = "../adapto_runtime" }
-adapto_compiler = { path = "../adapto_compiler" }
-adapto_client_protocol = { path = "../adapto_client_protocol" }
-adapto_auth = { path = "../adapto_auth" }
-adapto_audit = { path = "../adapto_audit" }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.4" }
+adapto_compiler = { path = "../adapto_compiler", version = "0.2.4" }
+adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.4" }
+adapto_auth = { path = "../adapto_auth", version = "0.2.4" }
+adapto_audit = { path = "../adapto_audit", version = "0.2.4" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

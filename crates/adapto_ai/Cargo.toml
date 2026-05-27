@@ -1,11 +1,15 @@
 [package]
 name = "adapto_ai"
+description = "Adapto AI integration — PII redaction, budget tracking, model routing"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
-adapto_runtime = { path = "../adapto_runtime" }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.4" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

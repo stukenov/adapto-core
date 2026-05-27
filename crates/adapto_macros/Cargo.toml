@@ -1,8 +1,12 @@
 [package]
 name = "adapto_macros"
+description = "Derive macros for Adapto — #[derive(Resource)] and field metadata"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [lib]
 proc-macro = true

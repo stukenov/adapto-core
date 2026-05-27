@@ -1,16 +1,20 @@
 [package]
 name = "adapto_test_utils"
+description = "Adapto test utilities — builders, fixtures, mocks for testing"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
-adapto_runtime = { path = "../adapto_runtime" }
-adapto_client_protocol = { path = "../adapto_client_protocol" }
-adapto_auth = { path = "../adapto_auth" }
-adapto_audit = { path = "../adapto_audit" }
-adapto_forms = { path = "../adapto_forms" }
-adapto_db = { path = "../adapto_db" }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.4" }
+adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.4" }
+adapto_auth = { path = "../adapto_auth", version = "0.2.4" }
+adapto_audit = { path = "../adapto_audit", version = "0.2.4" }
+adapto_forms = { path = "../adapto_forms", version = "0.2.4" }
+adapto_db = { path = "../adapto_db", version = "0.2.4" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

@@ -1,20 +1,24 @@
 [package]
 name = "adapto_cli"
+description = "Adapto CLI — dev server, build, check, generate, project scaffolding"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [[bin]]
 name = "adapto"
 path = "src/main.rs"
 
 [dependencies]
-adapto_parser = { path = "../adapto_parser" }
-adapto_compiler = { path = "../adapto_compiler" }
-adapto_runtime = { path = "../adapto_runtime" }
-adapto_ssr = { path = "../adapto_ssr" }
-adapto_store = { path = "../adapto_store" }
-adapto_live = { path = "../adapto_live" }
+adapto_parser = { path = "../adapto_parser", version = "0.2.4" }
+adapto_compiler = { path = "../adapto_compiler", version = "0.2.4" }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.4" }
+adapto_ssr = { path = "../adapto_ssr", version = "0.2.4" }
+adapto_store = { path = "../adapto_store", version = "0.2.4" }
+adapto_live = { path = "../adapto_live", version = "0.2.4" }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

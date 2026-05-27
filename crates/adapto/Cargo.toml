@@ -1,21 +1,24 @@
 [package]
 name = "adapto"
+description = "Adapto — full-stack Rust web framework for data-driven apps"
 version.workspace = true
 edition.workspace = true
-# Not published — depends on WIP crates. Use adapto_store/adapto_app/adapto_ui directly.
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
-adapto_store = { path = "../adapto_store" }
-adapto_ui = { path = "../adapto_ui" }
-adapto_forms = { path = "../adapto_forms" }
-adapto_client_protocol = { path = "../adapto_client_protocol" }
-adapto_ssr = { path = "../adapto_ssr" }
-adapto_live = { path = "../adapto_live" }
-adapto_runtime = { path = "../adapto_runtime" }
-adapto_auth = { path = "../adapto_auth" }
-adapto_audit = { path = "../adapto_audit" }
-adapto_macros = { path = "../adapto_macros" }
-adapto_app = { path = "../adapto_app" }
+adapto_store = { path = "../adapto_store", version = "0.2.4" }
+adapto_ui = { path = "../adapto_ui", version = "0.2.4" }
+adapto_forms = { path = "../adapto_forms", version = "0.2.4" }
+adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.4" }
+adapto_ssr = { path = "../adapto_ssr", version = "0.2.4" }
+adapto_live = { path = "../adapto_live", version = "0.2.4" }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.4" }
+adapto_auth = { path = "../adapto_auth", version = "0.2.4" }
+adapto_audit = { path = "../adapto_audit", version = "0.2.4" }
+adapto_macros = { path = "../adapto_macros", version = "0.2.4" }
+adapto_app = { path = "../adapto_app", version = "0.2.4" }
 serde = { workspace = true }
 serde_json = { workspace = true }

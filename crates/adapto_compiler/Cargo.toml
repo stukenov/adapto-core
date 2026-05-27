@@ -1,12 +1,16 @@
 [package]
 name = "adapto_compiler"
+description = "Adapto template compiler — IR generation, codegen, dependency graphs"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
-adapto_parser = { path = "../adapto_parser" }
-adapto_runtime = { path = "../adapto_runtime" }
+adapto_parser = { path = "../adapto_parser", version = "0.2.4" }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.4" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

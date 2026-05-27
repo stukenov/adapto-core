@@ -1,8 +1,12 @@
 [package]
 name = "adapto_parser"
+description = "Adapto DSL parser — Pest grammar for .adapto template files"
 version.workspace = true
 edition.workspace = true
-publish = false
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 pest = { workspace = true }
