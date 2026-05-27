@@ -1507,3 +1507,434 @@ fn phase5_protocol_redirect_with_flash() {
     assert_eq!(json["type"], "redirect");
     assert_eq!(json["url"], "/login");
 }
+
+// ===========================================================================
+// Phase 8: Full E2E Integration Tests
+// ===========================================================================
+
+use adapto_ssr::project::ProjectLoader;
+
+fn e2e_project_dir() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("adapto_e2e_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(dir.join("pages")).unwrap();
+    dir
+}
+
+fn write_adapto(dir: &std::path::Path, name: &str, content: &str) {
+    std::fs::write(dir.join("pages").join(name), content).unwrap();
+}
+
+#[test]
+fn e2e_full_pipeline_counter() {
+    let dir = e2e_project_dir();
+    write_adapto(&dir, "counter.adapto", r#"
+<route>
+  path: "/counter"
+  method: GET
+  auth: public
+</route>
+<script lang="rust">
+  state count: i32 = 0
+  state label: String = "Counter"
+
+  action fn increment() {
+    count += 1
+  }
+</script>
+<template>
+  <h1>{label}</h1>
+  <span>{count}</span>
+  <button data-ar-click="increment">+1</button>
+</template>
+"#);
+
+    let project = ProjectLoader::load_project(dir.to_str().unwrap(), b"e2e-secret").unwrap();
+    assert_eq!(project.file_count, 1);
+    assert!(project.route_manifest.find_by_path("/counter").is_some());
+    assert_eq!(project.component_irs.len(), 1);
+
+    // Verify SSR rendering works
+    let (comp_id, ir) = project.component_irs.iter().next().unwrap();
+    let renderer = Renderer::new(b"e2e-secret");
+    let mut state = StateStore::new();
+    state.set("count", json!(0));
+    state.set("label", json!("Counter"));
+    let html = renderer.render_component(ir, &state).unwrap();
+    assert!(html.contains("Counter"));
+    assert!(html.contains("data-ar-click=\"increment\""));
+
+    // Verify page wrapping
+    let (page_html, session_id) = renderer.render_page(ir, &state, None).unwrap();
+    assert!(page_html.contains("__ADAPTO_BOOTSTRAP__"));
+    assert!(page_html.contains("adapto-client.js"));
+    assert!(!session_id.is_empty());
+}
+
+#[test]
+fn e2e_full_pipeline_multi_page_app() {
+    let dir = e2e_project_dir();
+
+    write_adapto(&dir, "home.adapto", r#"
+<route>
+  path: "/"
+  method: GET
+  auth: public
+</route>
+<script lang="rust">
+  state title: String = "Welcome"
+</script>
+<template>
+  <h1>{title}</h1>
+  <a href="/about">About</a>
+</template>
+"#);
+
+    write_adapto(&dir, "about.adapto", r#"
+<route>
+  path: "/about"
+  method: GET
+  auth: public
+</route>
+<script lang="rust">
+  state page_title: String = "About Us"
+</script>
+<template>
+  <h1>{page_title}</h1>
+  <p>Learn more about this project.</p>
+</template>
+"#);
+
+    write_adapto(&dir, "dashboard.adapto", r#"
+<route>
+  path: "/dashboard"
+  method: GET
+  auth: required
+</route>
+<script lang="rust">
+  state user_name: String = "Guest"
+  state notifications: i32 = 0
+</script>
+<template>
+  <h1>Dashboard</h1>
+  <p>Hello, {user_name}!</p>
+  <span>{notifications} notifications</span>
+</template>
+"#);
+
+    let project = ProjectLoader::load_project(dir.to_str().unwrap(), b"e2e-secret").unwrap();
+    assert_eq!(project.file_count, 3);
+    assert!(project.route_manifest.find_by_path("/").is_some());
+    assert!(project.route_manifest.find_by_path("/about").is_some());
+    assert!(project.route_manifest.find_by_path("/dashboard").is_some());
+    assert_eq!(project.component_irs.len(), 3);
+}
+
+#[test]
+fn e2e_resource_crud_pipeline() {
+    let dir = e2e_project_dir();
+    write_adapto(&dir, "products.adapto", r#"
+<route>
+  path: "/products"
+  method: GET
+  auth: public
+</route>
+<script lang="rust">
+  state products: Vec<Product> = []
+</script>
+<template>
+  {#each products as product}
+    <div>{product.name}</div>
+  {/each}
+</template>
+<resource name="Product" table="products">
+  tenant: none
+  primary_key: id
+  field id: Uuid readonly
+  field name: String required max=200 searchable
+  field price: Decimal required
+  field sku: String required unique
+  permission read: "products.read"
+  permission create: "products.create"
+</resource>
+"#);
+
+    let project = ProjectLoader::load_project(dir.to_str().unwrap(), b"e2e-secret").unwrap();
+    assert!(project.resource_managers.contains_key("Product"));
+    assert_eq!(project.file_count, 1);
+}
+
+#[test]
+fn e2e_conditional_and_loop_rendering() {
+    let dir = e2e_project_dir();
+    write_adapto(&dir, "items.adapto", r#"
+<route>
+  path: "/items"
+  method: GET
+  auth: public
+</route>
+<script lang="rust">
+  state items: Vec<Item> = []
+  state show_header: bool = true
+</script>
+<template>
+  {#if show_header}
+    <h1>Item List</h1>
+  {/if}
+  {#each items as item}
+    <div class="item">{item.name} - ${item.price}</div>
+  {/each}
+</template>
+"#);
+
+    let project = ProjectLoader::load_project(dir.to_str().unwrap(), b"e2e-secret").unwrap();
+    let (_, ir) = project.component_irs.iter().next().unwrap();
+    let renderer = Renderer::new(b"e2e-secret");
+
+    // Render with show_header=true and items
+    let mut state = StateStore::new();
+    state.set("show_header", json!(true));
+    state.set("items", json!([
+        {"name": "Widget", "price": "9.99"},
+        {"name": "Gadget", "price": "19.99"},
+        {"name": "Doohickey", "price": "4.99"}
+    ]));
+
+    let html = renderer.render_component(ir, &state).unwrap();
+    assert!(html.contains("Item List"));
+    assert!(html.contains("Widget"));
+    assert!(html.contains("Gadget"));
+    assert!(html.contains("Doohickey"));
+
+    // Render with show_header=false
+    state.set("show_header", json!(false));
+    let html = renderer.render_component(ir, &state).unwrap();
+    assert!(!html.contains("Item List"));
+    assert!(html.contains("Widget"));
+}
+
+#[test]
+fn e2e_interpreter_action_execution() {
+    use adapto_live::session::LiveSession;
+    use adapto_compiler::dependency::DependencyGraph;
+    use adapto_client_protocol::event::ClientEvent;
+
+    let dir = e2e_project_dir();
+    write_adapto(&dir, "calc.adapto", r#"
+<route>
+  path: "/calc"
+  method: GET
+  auth: public
+</route>
+<script lang="rust">
+  state total: i32 = 0
+  state history: Vec<String> = []
+
+  action fn add_five() {
+    total += 5
+  }
+</script>
+<template>
+  <span>{total}</span>
+</template>
+"#);
+
+    let project = ProjectLoader::load_project(dir.to_str().unwrap(), b"e2e-secret").unwrap();
+    let (comp_id, ir) = project.component_irs.iter().next().unwrap();
+
+    // Build dependency graph
+    let graph = project.dependency_graphs.get(comp_id)
+        .cloned()
+        .unwrap_or_default();
+
+    // Create live session with state from defaults
+    let mut session = LiveSession::new(
+        adapto_runtime::types::SessionId::from("e2e-session"),
+        None,
+        None,
+        adapto_runtime::types::RouteId::from("/calc"),
+        ir.clone(),
+        graph,
+        PermissionSet::new(),
+    );
+    session.init_state_from_defaults();
+
+    assert_eq!(session.state.get("total"), Some(&json!(0)));
+
+    // Execute action via interpreter
+    let event = ClientEvent {
+        session: "e2e-session".into(),
+        component: comp_id.clone(),
+        event: "click".into(),
+        handler: "add_five".into(),
+        payload: std::collections::HashMap::new(),
+        seq: 1,
+    };
+
+    let patches = session.handle_event(&event).unwrap();
+    assert!(!patches.ops.is_empty());
+    assert_eq!(session.state.get("total"), Some(&json!(5)));
+
+    // Execute again
+    session.handle_event(&event).unwrap();
+    assert_eq!(session.state.get("total"), Some(&json!(10)));
+}
+
+#[test]
+fn e2e_page_renderer_with_project_loader() {
+    let dir = e2e_project_dir();
+    write_adapto(&dir, "home.adapto", r#"
+<route>
+  path: "/"
+  method: GET
+  auth: public
+</route>
+<script lang="rust">
+  state greeting: String = "Hello, Adapto!"
+</script>
+<template>
+  <main>
+    <h1>{greeting}</h1>
+  </main>
+</template>
+"#);
+
+    let project = ProjectLoader::load_project(dir.to_str().unwrap(), b"e2e-secret").unwrap();
+    let pr = project.page_renderer;
+
+    let ctx = Ctx {
+        user_id: None,
+        tenant_id: None,
+        request_id: adapto_runtime::types::RequestId::default(),
+        permissions: PermissionSet::new(),
+        route: adapto_runtime::types::RouteId::from("/"),
+        session_id: adapto_runtime::types::SessionId::from("test"),
+    };
+
+    let resp = pr.render_request("/", &ctx, StateStore::new()).unwrap();
+    assert_eq!(resp.status, 200);
+    assert!(resp.html.contains("__ADAPTO_BOOTSTRAP__"));
+    assert!(!resp.session_id.is_empty());
+}
+
+#[test]
+fn e2e_session_lifecycle_from_project() {
+    use adapto_live::session::LiveSession;
+    use adapto_live::manager::SessionManager;
+    use adapto_live::handler::EventDispatcher;
+    use adapto_client_protocol::event::*;
+    use adapto_client_protocol::patch::ServerPayload;
+
+    let dir = e2e_project_dir();
+    write_adapto(&dir, "counter.adapto", r#"
+<route>
+  path: "/counter"
+  method: GET
+  auth: public
+</route>
+<script lang="rust">
+  state count: i32 = 0
+
+  action fn increment() {
+    count += 1
+  }
+
+  action fn decrement() {
+    count -= 1
+  }
+</script>
+<template>
+  <span>{count}</span>
+</template>
+"#);
+
+    let project = ProjectLoader::load_project(dir.to_str().unwrap(), b"e2e-secret").unwrap();
+    let (comp_id, ir) = project.component_irs.iter().next().unwrap();
+    let graph = project.dependency_graphs.get(comp_id).cloned().unwrap_or_default();
+
+    // Simulate full session lifecycle
+    let mgr = SessionManager::new(10);
+    let mut session = LiveSession::new(
+        adapto_runtime::types::SessionId::from("lifecycle-1"),
+        None,
+        None,
+        adapto_runtime::types::RouteId::from("/counter"),
+        ir.clone(),
+        graph,
+        PermissionSet::new(),
+    );
+    session.init_state_from_defaults();
+    mgr.add(session).unwrap();
+
+    // Dispatch events through EventDispatcher
+    let mut dispatcher = EventDispatcher::new(100);
+
+    // Increment 3 times
+    for i in 1..=3 {
+        let result = mgr.with_session(
+            &adapto_runtime::types::SessionId::from("lifecycle-1"),
+            |session| {
+                dispatcher.dispatch(session, &ClientPayload::Event(ClientEvent {
+                    session: "lifecycle-1".into(),
+                    component: comp_id.clone(),
+                    event: "click".into(),
+                    handler: "increment".into(),
+                    payload: std::collections::HashMap::new(),
+                    seq: i,
+                }))
+            },
+        ).unwrap().unwrap();
+
+        match result {
+            ServerPayload::Patch(p) => {
+                assert!(!p.ops.is_empty());
+            }
+            _ => panic!("expected Patch"),
+        }
+    }
+
+    // Verify final state
+    mgr.with_session(
+        &adapto_runtime::types::SessionId::from("lifecycle-1"),
+        |session| {
+            assert_eq!(session.state.get("count"), Some(&json!(3)));
+        },
+    ).unwrap();
+
+    // Decrement once
+    mgr.with_session(
+        &adapto_runtime::types::SessionId::from("lifecycle-1"),
+        |session| {
+            dispatcher.dispatch(session, &ClientPayload::Event(ClientEvent {
+                session: "lifecycle-1".into(),
+                component: comp_id.clone(),
+                event: "click".into(),
+                handler: "decrement".into(),
+                payload: std::collections::HashMap::new(),
+                seq: 4,
+            }))
+        },
+    ).unwrap().unwrap();
+
+    mgr.with_session(
+        &adapto_runtime::types::SessionId::from("lifecycle-1"),
+        |session| {
+            assert_eq!(session.state.get("count"), Some(&json!(2)));
+        },
+    ).unwrap();
+
+    // Heartbeat
+    let hb_result = mgr.with_session(
+        &adapto_runtime::types::SessionId::from("lifecycle-1"),
+        |session| {
+            dispatcher.dispatch(session, &ClientPayload::Heartbeat(HeartbeatEvent {
+                session: "lifecycle-1".into(),
+                seq: 5,
+            }))
+        },
+    ).unwrap().unwrap();
+
+    match hb_result {
+        ServerPayload::HeartbeatAck(ack) => assert_eq!(ack.seq, 5),
+        _ => panic!("expected HeartbeatAck"),
+    }
+}

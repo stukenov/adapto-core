@@ -5,9 +5,13 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
-## [0.2.3] - 2026-05-27
+## [0.2.4] - 2026-05-27
 
 ### Added
+
+#### Phase 8: Integration Testing + Examples
+- **7 E2E integration tests** — full pipeline: write .adapto → ProjectLoader → SSR render → verify HTML. Counter, multi-page app, resource CRUD, conditional+loop rendering, interpreter action execution, PageRenderer with ProjectLoader, full session lifecycle (init→events→patches→heartbeat). (`ssr_tests.rs`)
+- **Counter example modernized** — removed manual `ActionHandler` closures, now uses interpreter fallback for increment/decrement/reset. State initialized via `init_state_from_defaults()`. (`server.rs`)
 
 #### Phase 7: CLI dev & build Commands
 - **`cmd_dev` real implementation** — async, compiles project via `ProjectLoader`, registers dependency graphs, constructs `AdaptoServer`, starts HTTP+WS server. Reports file/route/resource counts. (`commands.rs`)

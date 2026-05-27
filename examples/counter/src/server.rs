@@ -1,7 +1,7 @@
 use adapto_compiler::compiler::Compiler;
 use adapto_compiler::ir::ComponentIR;
 use adapto_live::manager::SessionManager;
-use adapto_live::session::{ActionHandler, LiveSession};
+use adapto_live::session::LiveSession;
 use adapto_runtime::context::PermissionSet;
 use adapto_runtime::state::StateStore;
 use adapto_runtime::types::*;
@@ -24,15 +24,15 @@ const COUNTER_DSL: &str = r#"
 <script lang="rust">
   state count: i32 = 0
 
-  action increment() {
+  action fn increment() {
     count += 1
   }
 
-  action decrement() {
+  action fn decrement() {
     count -= 1
   }
 
-  action reset() {
+  action fn reset() {
     count = 0
   }
 </script>
@@ -119,6 +119,8 @@ async fn handle_ws(ws: WebSocketUpgrade, State(app): State<Arc<App>>) -> impl In
 
 async fn ws_loop(mut socket: WebSocket, app: Arc<App>) {
     let session_id = SessionId::from("live-counter-1");
+
+    // Create session and init state from IR defaults (no manual handlers needed)
     let mut session = LiveSession::new(
         session_id.clone(),
         None,
@@ -128,38 +130,7 @@ async fn ws_loop(mut socket: WebSocket, app: Arc<App>) {
         app.dep_graph.clone(),
         PermissionSet::new(),
     );
-
-    // Register handlers
-    let inc: ActionHandler = Box::new(|state, _ctx, _payload| {
-        let count = state
-            .get("count")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        state.set("count", json!(count + 1));
-        Ok(())
-    });
-    session.register_handler("increment", inc);
-
-    let dec: ActionHandler = Box::new(|state, _ctx, _payload| {
-        let count = state
-            .get("count")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        state.set("count", json!(count - 1));
-        Ok(())
-    });
-    session.register_handler("decrement", dec);
-
-    let rst: ActionHandler = Box::new(|state, _ctx, _payload| {
-        state.set("count", json!(0));
-        Ok(())
-    });
-    session.register_handler("reset", rst);
-
-    // Init state
-    session.state.set("count", json!(0));
-    session.state.clear_dirty();
-
+    session.init_state_from_defaults();
     let _ = app.session_manager.add(session);
 
     while let Some(Ok(msg)) = socket.recv().await {
@@ -171,7 +142,6 @@ async fn ws_loop(mut socket: WebSocket, app: Arc<App>) {
                         .and_then(|h| h.as_str())
                         .unwrap_or("");
 
-                    // Process through session manager
                     let response = app.session_manager.with_session(&session_id, |s| {
                         let event = adapto_client_protocol::event::ClientEvent {
                             session: session_id.0.clone(),
@@ -186,9 +156,7 @@ async fn ws_loop(mut socket: WebSocket, app: Arc<App>) {
                             Ok(patch) => {
                                 let server_msg =
                                     adapto_client_protocol::patch::ServerMessage::new(
-                                        adapto_client_protocol::patch::ServerPayload::Patch(
-                                            patch,
-                                        ),
+                                        adapto_client_protocol::patch::ServerPayload::Patch(patch),
                                     );
                                 serde_json::to_string(&server_msg).ok()
                             }
