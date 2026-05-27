@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+#### Phase 3: Resource → CRUD Pipeline
+- **ResourceIR** — compiled resource definition with fields, indexes, permissions, tenant scoping. Defined in both `adapto_compiler::ir` and `adapto_runtime::resource` (structurally identical, serde-compatible). (`ir.rs`, `resource.rs`)
+- **Compiler resource compilation** — `compile_resource()` transforms parser `ResourceBlock` → `ResourceIR` with field constraints, unique/searchable indexes, permission map. Added `resource_ir: Option<ResourceIR>` to `CompileOutput`. (`compiler.rs`)
+- **ResourceManager** — CRUD operations against `AdaptoStore` with automatic tenant scoping via `TenantScope`/`TenantCollection`, field validation (required, min/max length, readonly), default value application, permission checking. (`resource.rs`)
+- **16 resource tests** — create/get, tenant isolation, missing required field, field too long, update, readonly field rejection, delete, permission denied (read/create), tenant required, count, default values, non-tenant resource, full CRUD lifecycle, list with limit/skip. (`resource.rs`)
+
 #### Phase 2: Full Action Interpreter
 - **Interpreter module** — lexer, parser, evaluator for action body DSL. Supports assignments (`=`, `+=`, `-=`, `*=`, `/=`), binary operators (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`), unary (`!`, `-`), `let` bindings, `if/else`, `for..in` loops, dot-path access/assignment, index access, method calls, array/object literals, comments, string concatenation. (`interpreter.rs`)
 - **Built-in methods** — `len()`, `push()`, `contains()`, `is_empty()`, `to_lowercase()`, `to_uppercase()`, `trim()`, `starts_with()`, `ends_with()`, `split()`, `replace()`, `keys()`, `values()`, `abs()`. (`interpreter.rs`)

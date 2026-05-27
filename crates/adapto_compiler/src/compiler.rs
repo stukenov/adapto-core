@@ -15,6 +15,7 @@ pub struct CompileOutput {
     pub dependency_graph: DependencyGraph,
     pub generated_rust: String,
     pub route_entry: Option<RouteEntry>,
+    pub resource_ir: Option<ResourceIR>,
 }
 
 /// The compiler orchestrator.
@@ -163,11 +164,14 @@ impl Compiler {
             dependencies: deps,
         });
 
+        let resource_ir = file.resource.as_ref().map(|r| self.compile_resource(r));
+
         Ok(CompileOutput {
             component_ir: ir,
             dependency_graph,
             generated_rust,
             route_entry,
+            resource_ir,
         })
     }
 
@@ -580,6 +584,55 @@ impl Compiler {
             static_segments: statics,
             dynamic_segments: dynamics,
         })
+    }
+
+    fn compile_resource(&self, resource: &ResourceBlock) -> ResourceIR {
+        let mut fields = Vec::new();
+        let mut indexes = Vec::new();
+
+        for f in &resource.fields {
+            let required = f.constraints.contains(&FieldConstraint::Required);
+            let unique = f.constraints.contains(&FieldConstraint::Unique);
+            let min = f.constraints.iter().find_map(|c| if let FieldConstraint::Min(n) = c { Some(*n) } else { None });
+            let max = f.constraints.iter().find_map(|c| if let FieldConstraint::Max(n) = c { Some(*n) } else { None });
+
+            if unique {
+                indexes.push(ResourceIndexIR { field: f.name.clone(), unique: true });
+            }
+            if f.searchable {
+                indexes.push(ResourceIndexIR { field: f.name.clone(), unique: false });
+            }
+
+            fields.push(ResourceFieldIR {
+                name: f.name.clone(),
+                ty: f.ty.clone(),
+                required,
+                unique,
+                searchable: f.searchable,
+                readonly: f.readonly,
+                default: f.default.clone(),
+                min,
+                max,
+            });
+        }
+
+        let permissions: std::collections::HashMap<String, String> = resource
+            .permissions
+            .iter()
+            .map(|p| (p.action.clone(), p.permission.clone()))
+            .collect();
+
+        let tenant_scoped = !matches!(resource.tenant, TenantLevel::None);
+
+        ResourceIR {
+            name: resource.name.clone(),
+            collection_name: resource.table.clone(),
+            tenant_scoped,
+            primary_key: resource.primary_key.clone(),
+            fields,
+            indexes,
+            permissions,
+        }
     }
 
     /// Compile script block to actions, state fields, and form schemas.

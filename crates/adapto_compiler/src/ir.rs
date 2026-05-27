@@ -88,6 +88,37 @@ impl DynamicSegment {
     }
 }
 
+/// A compiled resource definition for auto-generated CRUD.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceIR {
+    pub name: String,
+    pub collection_name: String,
+    pub tenant_scoped: bool,
+    pub primary_key: String,
+    pub fields: Vec<ResourceFieldIR>,
+    pub indexes: Vec<ResourceIndexIR>,
+    pub permissions: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceFieldIR {
+    pub name: String,
+    pub ty: String,
+    pub required: bool,
+    pub unique: bool,
+    pub searchable: bool,
+    pub readonly: bool,
+    pub default: Option<String>,
+    pub min: Option<usize>,
+    pub max: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceIndexIR {
+    pub field: String,
+    pub unique: bool,
+}
+
 /// A compiled event binding.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventIR {
