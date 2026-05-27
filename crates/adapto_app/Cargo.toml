@@ -10,9 +10,9 @@ description = "App builder for Adapto — declarative routes, async handlers, mi
 readme = "README.md"
 
 [dependencies]
-adapto_store = { path = "../adapto_store", version = "0.2.4" }
-adapto_ui = { path = "../adapto_ui", version = "0.2.4" }
-adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.4" }
+adapto_store = { path = "../adapto_store", version = "0.2.5" }
+adapto_ui = { path = "../adapto_ui", version = "0.2.5" }
+adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.5" }
 axum = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

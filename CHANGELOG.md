@@ -5,6 +5,70 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.5] - 2026-05-27
+
+### Added
+
+#### adapto_auth — Production authentication
+- **PBKDF2-SHA256 password hashing** — `hash_password()`, `verify_password()`, `validate_password_strength()`. 100K iterations, 16-byte CSPRNG salt (getrandom), 32-byte hash, constant-time comparison. Format: `pbkdf2-sha256$iterations$base64(salt)$base64(hash)`. (`password.rs`)
+- **HS256 JWT** — `encode()`, `decode()`, `decode_without_verify()`. Claims with sub/iat/exp/iss/aud/custom fields. Builder: `.with_issuer()`, `.with_audience()`, `.with_claim()`. Uses existing hmac/sha2/base64 deps. (`jwt.rs`)
+- **Session store** — `SessionStore` trait (create/get/update/destroy/exists/cleanup_expired). `InMemorySessionStore` with Arc<RwLock<HashMap>>. (`session_store.rs`)
+- **Auth middleware config** — `AuthConfig` builder with enable_jwt/disable_csrf/public_path. Helpers: `validate_csrf_header()`, `validate_bearer_token()`, `validate_session_cookie()`, `generate_csrf_token()`, `sign_session()`, `issue_jwt()`. (`middleware.rs`)
+- **78 tests** (was 49)
+
+#### adapto_audit — Production audit logging
+- **File sink** — JSON-lines append sink for persistent audit logging. (`sink.rs`)
+- **Composite sink** — fan-out to multiple sinks simultaneously. (`sink.rs`)
+- **Retention sink** — bounded buffer with FIFO eviction. (`sink.rs`)
+- **Audit filter** — builder with event/action/user/tenant/status/date-range/route-prefix. `matches()` method. Query and count on InMemoryAuditSink. (`filter.rs`)
+- **PII redaction** — configurable field patterns (email, password, ssn, phone, credit_card, token, secret, api_key). Case-insensitive matching. UTF-8 safe char-based redaction. (`redact.rs`)
+- **30 tests** (was 15)
+
+#### adapto_forms — Cross-field validation & sanitizers
+- **Cross-field rules** — `FieldsMatch`, `RequiredIf`, `RequiredUnless`, `MutuallyExclusive`, `AtLeastOneOf`, `Custom`. (`rules.rs`)
+- **Sanitizer pipeline** — `Trim`, `Lowercase`, `Uppercase`, `StripHtml`, `TruncateTo(usize)`. Per-field chains. (`sanitize.rs`)
+- **`validate_and_sanitize()`** — combined validation + sanitization in one pass. (`schema.rs`)
+- **54 tests** (was 37)
+
+#### adapto_db — Database abstraction layer
+- **DatabasePool trait** — async execute/query_one/query_all/in_transaction/health_check. `InMemoryPool` for testing. (`pool.rs`)
+- **SQL generation** — `insert_sql()`, `update_sql()`, `delete_sql()`, `select_by_id_sql()`, `count_sql()`, `upsert_sql()`, `truncate_sql()`. Parameterized $1,$2 placeholders. (`sql.rs`)
+- **Migration runner** — `MigrationRunner` with pending/run_pending/rollback_last/status/mark_applied. (`runner.rs`)
+- **50 tests** (was 38)
+
+#### adapto_ai — LLM integration
+- **LlmClient trait** — `complete()` and `complete_json()` with BoxFuture. (`client.rs`)
+- **MockLlmClient** — sequential responses, request recording, call counting. (`client.rs`)
+- **MultiProviderClient** — named provider registry. (`client.rs`)
+- **CompletionRequest builder** — system/user/assistant messages, temperature, max_tokens, stop sequences. (`client.rs`)
+- **Prompt templates** — `PromptTemplate` with {{var}} substitution, system+user templates. `PromptLibrary` for named registry. (`prompt.rs`)
+- **Response cache** — TTL, max entries, LRU eviction, stats, cleanup_expired. (`cache.rs`)
+- **64 tests** (was 41)
+
+#### adapto_macros — Extended derive
+- **`update_in()`** — update resource by doc ID via Update::Set. (`resource.rs`)
+- **`find_one_by()`** — find one resource by field value. (`resource.rs`)
+- **`delete_where()`** — delete all matching query, returns count. (`resource.rs`)
+- **`exists()`** — check existence by field value. (`resource.rs`)
+- **12 tests** (was 8)
+
+#### adapto_test_utils — HTTP & store test helpers
+- **TestRequest builder** — GET/POST/PUT/DELETE/PATCH with json_body, headers, bearer auth, query params. (`http.rs`)
+- **TestResponse builder** — ok/json/not_found/redirect constructors. Status checks, body parsing. (`http.rs`)
+- **HTTP assertions** — `assert_status()`, `assert_body_contains()`, `assert_json_field()`, `assert_header()`. (`http.rs`)
+- **Store helpers** — `temp_store()`, `StoreSeeder` with insert/seed_n/with_index. (`store.rs`)
+- **Store assertions** — `assert_doc_exists()`, `assert_doc_not_exists()`, `assert_doc_field()`, `assert_collection_count()`, `assert_query_count()`. (`store.rs`)
+- **JSON snapshot** — `assert_json_eq()`, `assert_json_includes()`, `assert_json_shape()`, `assert_json_array_len()`, `json_diff()`. (`snapshot.rs`)
+- **80 tests** (was 35)
+
+#### adapto — Complete umbrella crate
+- **Feature flags** — `default` (app/ui/forms/auth/audit/macros/live), `full` (+ai/db/parser). No-default-features gives store-only. (`Cargo.toml`)
+- **15 crate re-exports** — all workspace crates except cli and test_utils. Conditional on feature flags. (`lib.rs`)
+- **Expanded prelude** — auth (JWT, password, sessions), audit (events, sinks), AI (LlmClient, prompts, cache), DB (pool, migrations) added to prelude. (`lib.rs`)
+
+### Changed
+- **Workspace tests** — 1118 tests across all crates (was 948)
+
 ## [0.2.4] - 2026-05-27
 
 ### Added

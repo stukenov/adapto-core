@@ -13,12 +13,12 @@ name = "adapto"
 path = "src/main.rs"
 
 [dependencies]
-adapto_parser = { path = "../adapto_parser", version = "0.2.4" }
-adapto_compiler = { path = "../adapto_compiler", version = "0.2.4" }
-adapto_runtime = { path = "../adapto_runtime", version = "0.2.4" }
-adapto_ssr = { path = "../adapto_ssr", version = "0.2.4" }
-adapto_store = { path = "../adapto_store", version = "0.2.4" }
-adapto_live = { path = "../adapto_live", version = "0.2.4" }
+adapto_parser = { path = "../adapto_parser", version = "0.2.5" }
+adapto_compiler = { path = "../adapto_compiler", version = "0.2.5" }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.5" }
+adapto_ssr = { path = "../adapto_ssr", version = "0.2.5" }
+adapto_store = { path = "../adapto_store", version = "0.2.5" }
+adapto_live = { path = "../adapto_live", version = "0.2.5" }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -9,13 +9,13 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-adapto_runtime = { path = "../adapto_runtime", version = "0.2.4" }
-adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.4" }
-adapto_auth = { path = "../adapto_auth", version = "0.2.4" }
-adapto_audit = { path = "../adapto_audit", version = "0.2.4" }
-adapto_forms = { path = "../adapto_forms", version = "0.2.4" }
-adapto_db = { path = "../adapto_db", version = "0.2.4" }
-adapto_store = { path = "../adapto_store", version = "0.2.4" }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.5" }
+adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.5" }
+adapto_auth = { path = "../adapto_auth", version = "0.2.5" }
+adapto_audit = { path = "../adapto_audit", version = "0.2.5" }
+adapto_forms = { path = "../adapto_forms", version = "0.2.5" }
+adapto_db = { path = "../adapto_db", version = "0.2.5" }
+adapto_store = { path = "../adapto_store", version = "0.2.5" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

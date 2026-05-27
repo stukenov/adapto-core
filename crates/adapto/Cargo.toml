@@ -23,20 +23,20 @@ db = ["dep:adapto_db"]
 parser = ["dep:adapto_parser", "dep:adapto_compiler"]
 
 [dependencies]
-adapto_store = { path = "../adapto_store", version = "0.2.4" }
-adapto_app = { path = "../adapto_app", version = "0.2.4", optional = true }
-adapto_ui = { path = "../adapto_ui", version = "0.2.4", optional = true }
-adapto_forms = { path = "../adapto_forms", version = "0.2.4", optional = true }
-adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.4", optional = true }
-adapto_ssr = { path = "../adapto_ssr", version = "0.2.4", optional = true }
-adapto_live = { path = "../adapto_live", version = "0.2.4", optional = true }
-adapto_runtime = { path = "../adapto_runtime", version = "0.2.4", optional = true }
-adapto_auth = { path = "../adapto_auth", version = "0.2.4", optional = true }
-adapto_audit = { path = "../adapto_audit", version = "0.2.4", optional = true }
-adapto_macros = { path = "../adapto_macros", version = "0.2.4", optional = true }
-adapto_ai = { path = "../adapto_ai", version = "0.2.4", optional = true }
-adapto_db = { path = "../adapto_db", version = "0.2.4", optional = true }
-adapto_parser = { path = "../adapto_parser", version = "0.2.4", optional = true }
-adapto_compiler = { path = "../adapto_compiler", version = "0.2.4", optional = true }
+adapto_store = { path = "../adapto_store", version = "0.2.5" }
+adapto_app = { path = "../adapto_app", version = "0.2.5", optional = true }
+adapto_ui = { path = "../adapto_ui", version = "0.2.5", optional = true }
+adapto_forms = { path = "../adapto_forms", version = "0.2.5", optional = true }
+adapto_client_protocol = { path = "../adapto_client_protocol", version = "0.2.5", optional = true }
+adapto_ssr = { path = "../adapto_ssr", version = "0.2.5", optional = true }
+adapto_live = { path = "../adapto_live", version = "0.2.5", optional = true }
+adapto_runtime = { path = "../adapto_runtime", version = "0.2.5", optional = true }
+adapto_auth = { path = "../adapto_auth", version = "0.2.5", optional = true }
+adapto_audit = { path = "../adapto_audit", version = "0.2.5", optional = true }
+adapto_macros = { path = "../adapto_macros", version = "0.2.5", optional = true }
+adapto_ai = { path = "../adapto_ai", version = "0.2.5", optional = true }
+adapto_db = { path = "../adapto_db", version = "0.2.5", optional = true }
+adapto_parser = { path = "../adapto_parser", version = "0.2.5", optional = true }
+adapto_compiler = { path = "../adapto_compiler", version = "0.2.5", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

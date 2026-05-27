@@ -14,7 +14,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-adapto_store = { path = "../adapto_store", version = "0.2.4" }
+adapto_store = { path = "../adapto_store", version = "0.2.5" }
 
 [dev-dependencies]
 insta = { workspace = true }
