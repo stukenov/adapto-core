@@ -39,10 +39,14 @@ impl PiiRedactor {
 
     pub fn redact(&self, event: &mut AuditEvent) {
         let replacement = serde_json::Value::String(self.replacement.clone());
-        for field in &self.fields {
-            if event.metadata.contains_key(field) {
-                event.metadata.insert(field.clone(), replacement.clone());
-            }
+        let keys_to_redact: Vec<String> = event
+            .metadata
+            .keys()
+            .filter(|k| self.is_sensitive(k))
+            .cloned()
+            .collect();
+        for k in keys_to_redact {
+            event.metadata.insert(k, replacement.clone());
         }
     }
 
@@ -67,11 +71,12 @@ impl Default for PiiRedactor {
 pub fn redact_value(value: &serde_json::Value) -> serde_json::Value {
     match value {
         serde_json::Value::String(s) => {
-            if s.len() <= 4 {
+            let char_count = s.chars().count();
+            if char_count <= 4 {
                 serde_json::Value::String("****".into())
             } else {
-                let masked = format!("{}***", &s[..2]);
-                serde_json::Value::String(masked)
+                let head: String = s.chars().take(2).collect();
+                serde_json::Value::String(format!("{}***", head))
             }
         }
         other => other.clone(),
