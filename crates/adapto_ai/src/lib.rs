@@ -1,6 +1,9 @@
 pub mod action;
 pub mod budget;
+pub mod cache;
+pub mod client;
 pub mod error;
 pub mod model;
 pub mod pii;
+pub mod prompt;
 pub mod trace;
