@@ -1,5 +1,9 @@
 pub mod csrf;
 pub mod error;
+pub mod jwt;
+pub mod middleware;
+pub mod password;
 pub mod rate_limit;
 pub mod rbac;
+pub mod session_store;
 pub mod session_token;

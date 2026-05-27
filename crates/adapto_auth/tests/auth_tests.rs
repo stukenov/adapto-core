@@ -1,12 +1,17 @@
 use adapto_auth::csrf;
 use adapto_auth::error::AuthError;
+use adapto_auth::jwt;
+use adapto_auth::middleware::{self, AuthConfig};
+use adapto_auth::password;
 use adapto_auth::rate_limit::RateLimiter;
 use adapto_auth::rbac::{RbacStore, Role};
+use adapto_auth::session_store::{InMemorySessionStore, SessionData, SessionStore};
 use adapto_auth::session_token;
 use adapto_runtime::types::UserId;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use std::collections::HashSet;
+use std::time::Duration;
 
 const SECRET: &[u8] = b"test-secret-key-32-bytes-long!!!";
 const OTHER_SECRET: &[u8] = b"other-secret-key-32-bytes-long!!";
@@ -538,4 +543,293 @@ fn error_is_debug() {
     let e = AuthError::MalformedToken;
     let dbg = format!("{:?}", e);
     assert!(dbg.contains("MalformedToken"));
+}
+
+// ===========================================================================
+// Password Hashing
+// ===========================================================================
+
+#[test]
+fn password_hash_verify_roundtrip() {
+    let hash = password::hash_password("Str0ng!Pass");
+    assert!(password::verify_password("Str0ng!Pass", &hash).is_ok());
+}
+
+#[test]
+fn password_wrong_fails() {
+    let hash = password::hash_password("correct");
+    assert!(matches!(
+        password::verify_password("wrong", &hash),
+        Err(AuthError::PasswordMismatch)
+    ));
+}
+
+#[test]
+fn password_different_salts_produce_different_hashes() {
+    let h1 = password::hash_password("same");
+    let h2 = password::hash_password("same");
+    assert_ne!(h1, h2);
+    assert!(password::verify_password("same", &h1).is_ok());
+    assert!(password::verify_password("same", &h2).is_ok());
+}
+
+#[test]
+fn password_malformed_hash_rejected() {
+    assert!(matches!(
+        password::verify_password("x", "not-a-hash"),
+        Err(AuthError::InvalidPasswordHash)
+    ));
+    assert!(matches!(
+        password::verify_password("x", "wrong-algo$100000$AAAA$BBBB"),
+        Err(AuthError::InvalidPasswordHash)
+    ));
+}
+
+#[test]
+fn password_strength_validation() {
+    let weak = password::validate_password_strength("abc");
+    assert!(!weak.is_empty());
+    let strong = password::validate_password_strength("MyStr0ng!Pass");
+    assert!(strong.is_empty());
+}
+
+#[test]
+fn password_empty_string() {
+    let hash = password::hash_password("");
+    assert!(password::verify_password("", &hash).is_ok());
+    assert!(password::verify_password("x", &hash).is_err());
+}
+
+#[test]
+fn password_unicode() {
+    let hash = password::hash_password("пароль123!A");
+    assert!(password::verify_password("пароль123!A", &hash).is_ok());
+}
+
+// ===========================================================================
+// JWT
+// ===========================================================================
+
+#[test]
+fn jwt_encode_decode_roundtrip() {
+    let claims = jwt::Claims::new("user-42", 3600);
+    let token = jwt::encode(&claims, SECRET);
+    let decoded = jwt::decode(&token, SECRET).unwrap();
+    assert_eq!(decoded.sub, "user-42");
+    assert!(!decoded.is_expired());
+}
+
+#[test]
+fn jwt_wrong_secret_rejected() {
+    let claims = jwt::Claims::new("user-1", 3600);
+    let token = jwt::encode(&claims, SECRET);
+    assert!(jwt::decode(&token, OTHER_SECRET).is_err());
+}
+
+#[test]
+fn jwt_expired_rejected() {
+    let mut claims = jwt::Claims::new("user-1", 0);
+    claims.exp = claims.iat - 1;
+    let token = jwt::encode(&claims, SECRET);
+    assert!(matches!(jwt::decode(&token, SECRET), Err(AuthError::ExpiredJwt)));
+}
+
+#[test]
+fn jwt_custom_claims_roundtrip() {
+    let claims = jwt::Claims::new("user-1", 3600)
+        .with_issuer("adapto")
+        .with_audience("web")
+        .with_claim("role", serde_json::json!("admin"))
+        .with_claim("org_id", serde_json::json!(42));
+    let token = jwt::encode(&claims, SECRET);
+    let decoded = jwt::decode(&token, SECRET).unwrap();
+    assert_eq!(decoded.iss.as_deref(), Some("adapto"));
+    assert_eq!(decoded.aud.as_deref(), Some("web"));
+    assert_eq!(decoded.custom["role"], "admin");
+    assert_eq!(decoded.custom["org_id"], 42);
+}
+
+#[test]
+fn jwt_tampered_payload() {
+    let claims = jwt::Claims::new("user-1", 3600);
+    let token = jwt::encode(&claims, SECRET);
+    let parts: Vec<&str> = token.splitn(3, '.').collect();
+    let fake = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(br#"{"sub":"admin","iat":0,"exp":99999999999}"#);
+    let tampered = format!("{}.{}.{}", parts[0], fake, parts[2]);
+    assert!(jwt::decode(&tampered, SECRET).is_err());
+}
+
+#[test]
+fn jwt_malformed() {
+    assert!(jwt::decode("not.jwt", SECRET).is_err());
+    assert!(jwt::decode("", SECRET).is_err());
+    assert!(jwt::decode("a.b.c", SECRET).is_err());
+}
+
+#[test]
+fn jwt_decode_without_verify() {
+    let claims = jwt::Claims::new("peek", 3600).with_issuer("test");
+    let token = jwt::encode(&claims, SECRET);
+    let decoded = jwt::decode_without_verify(&token).unwrap();
+    assert_eq!(decoded.sub, "peek");
+    assert_eq!(decoded.iss.as_deref(), Some("test"));
+}
+
+// ===========================================================================
+// Session Store
+// ===========================================================================
+
+#[test]
+fn session_store_create_and_get() {
+    let store = InMemorySessionStore::new();
+    let data = SessionData::new("user-1");
+    store.create("s1", data).unwrap();
+    let got = store.get("s1").unwrap();
+    assert_eq!(got.user_id, "user-1");
+}
+
+#[test]
+fn session_store_get_nonexistent() {
+    let store = InMemorySessionStore::new();
+    assert!(matches!(store.get("x"), Err(AuthError::SessionNotFound)));
+}
+
+#[test]
+fn session_store_update() {
+    let store = InMemorySessionStore::new();
+    let mut data = SessionData::new("user-1");
+    store.create("s1", data.clone()).unwrap();
+    data.set("lang", serde_json::json!("ru"));
+    store.update("s1", data).unwrap();
+    let got = store.get("s1").unwrap();
+    assert_eq!(got.get("lang").unwrap(), "ru");
+}
+
+#[test]
+fn session_store_destroy() {
+    let store = InMemorySessionStore::new();
+    store.create("s1", SessionData::new("u")).unwrap();
+    store.destroy("s1").unwrap();
+    assert!(!store.exists("s1"));
+}
+
+#[test]
+fn session_store_cleanup() {
+    let store = InMemorySessionStore::new();
+    let mut old = SessionData::new("old-user");
+    old.last_accessed = Some(std::time::Instant::now() - Duration::from_secs(7200));
+    store.create("old", old).unwrap();
+    store.create("new", SessionData::new("new-user")).unwrap();
+
+    let removed = store.cleanup_expired(Duration::from_secs(3600));
+    assert_eq!(removed, 1);
+    assert!(!store.exists("old"));
+    assert!(store.exists("new"));
+}
+
+#[test]
+fn session_store_len() {
+    let store = InMemorySessionStore::new();
+    assert_eq!(store.len(), 0);
+    assert!(store.is_empty());
+    store.create("a", SessionData::new("u")).unwrap();
+    store.create("b", SessionData::new("u")).unwrap();
+    assert_eq!(store.len(), 2);
+}
+
+#[test]
+fn session_data_set_get_remove() {
+    let mut data = SessionData::new("u");
+    data.set("k", serde_json::json!(123));
+    assert_eq!(data.get("k").unwrap(), &serde_json::json!(123));
+    assert!(data.remove("k").is_some());
+    assert!(data.get("k").is_none());
+}
+
+// ===========================================================================
+// Middleware
+// ===========================================================================
+
+#[test]
+fn middleware_csrf_roundtrip() {
+    let cfg = AuthConfig::new(SECRET);
+    let token = middleware::generate_csrf_token(&cfg);
+    assert!(middleware::validate_csrf_header(&cfg, Some(&token)).is_ok());
+}
+
+#[test]
+fn middleware_csrf_disabled() {
+    let cfg = AuthConfig::new(SECRET).disable_csrf();
+    assert!(middleware::validate_csrf_header(&cfg, None).is_ok());
+}
+
+#[test]
+fn middleware_bearer_roundtrip() {
+    let cfg = AuthConfig::new(SECRET).enable_jwt();
+    let token = middleware::issue_jwt(&cfg, "user-1", 3600);
+    let header = format!("Bearer {}", token);
+    let claims = middleware::validate_bearer_token(&cfg, Some(&header)).unwrap();
+    assert_eq!(claims.sub, "user-1");
+}
+
+#[test]
+fn middleware_bearer_missing() {
+    let cfg = AuthConfig::new(SECRET);
+    assert!(matches!(
+        middleware::validate_bearer_token(&cfg, None),
+        Err(AuthError::Unauthorized)
+    ));
+}
+
+#[test]
+fn middleware_session_cookie_roundtrip() {
+    let cfg = AuthConfig::new(SECRET);
+    let signed = middleware::sign_session(&cfg, "sess-42");
+    let id = middleware::validate_session_cookie(&cfg, Some(&signed)).unwrap();
+    assert_eq!(id, "sess-42");
+}
+
+#[test]
+fn middleware_public_paths() {
+    let cfg = AuthConfig::new(SECRET)
+        .public_path("/health")
+        .public_path("/static/*");
+    assert!(cfg.is_public("/health"));
+    assert!(cfg.is_public("/static/main.js"));
+    assert!(!cfg.is_public("/api/users"));
+}
+
+#[test]
+fn middleware_issue_jwt_with_claims() {
+    let cfg = AuthConfig::new(SECRET);
+    let claims = jwt::Claims::new("admin", 3600).with_issuer("adapto");
+    let token = middleware::issue_jwt_with_claims(&cfg, &claims);
+    let header = format!("Bearer {}", token);
+    let decoded = middleware::validate_bearer_token(&cfg, Some(&header)).unwrap();
+    assert_eq!(decoded.sub, "admin");
+    assert_eq!(decoded.iss.as_deref(), Some("adapto"));
+}
+
+// ===========================================================================
+// New Error Variants Display
+// ===========================================================================
+
+#[test]
+fn error_display_new_variants() {
+    assert_eq!(AuthError::InvalidPasswordHash.to_string(), "Invalid password hash");
+    assert_eq!(AuthError::PasswordMismatch.to_string(), "Password verification failed");
+    assert_eq!(AuthError::ExpiredJwt.to_string(), "Expired JWT");
+    assert_eq!(AuthError::SessionNotFound.to_string(), "Session not found");
+    assert_eq!(AuthError::SessionExpired.to_string(), "Session expired");
+    assert_eq!(AuthError::RateLimitExceeded.to_string(), "Rate limit exceeded");
+    assert_eq!(AuthError::Unauthorized.to_string(), "Unauthorized");
+    assert_eq!(
+        AuthError::InvalidJwt("bad".into()).to_string(),
+        "Invalid JWT: bad"
+    );
+    assert_eq!(
+        AuthError::Forbidden("no access".into()).to_string(),
+        "Forbidden: no access"
+    );
 }
