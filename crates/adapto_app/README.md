@@ -16,8 +16,8 @@ Part of the [Adapto](https://github.com/stukenov/adapto-core) web framework.
 
 ```toml
 [dependencies]
-adapto_app = "0.1"
-adapto_store = "0.1"
+adapto_app = "0.2"
+adapto_store = "0.2"
 ```
 
 ```rust

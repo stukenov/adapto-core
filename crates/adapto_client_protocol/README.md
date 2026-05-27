@@ -16,7 +16,7 @@ This crate is used internally by `adapto_app` for WebSocket communication. You t
 
 ```toml
 [dependencies]
-adapto_client_protocol = "0.1"
+adapto_client_protocol = "0.2"
 ```
 
 ```rust
