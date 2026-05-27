@@ -257,6 +257,59 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
                     _ => None,
                 }
             }
+
+            /// Update this resource in the store by document ID.
+            pub fn update_in(
+                &self,
+                store: &adapto_store::AdaptoStore,
+                id: &str,
+            ) -> Result<bool, adapto_store::StoreError> {
+                let col = store.collection(#collection);
+                let val = self.to_value();
+                let fields: Vec<(String, serde_json::Value)> = match val {
+                    serde_json::Value::Object(map) => map.into_iter().collect(),
+                    _ => vec![],
+                };
+                col.update_by_id(id, adapto_store::Update::Set(fields))
+            }
+
+            /// Find one resource by a field value (requires index for O(1)).
+            pub fn find_one_by(
+                store: &adapto_store::AdaptoStore,
+                field: &str,
+                value: impl Into<serde_json::Value>,
+            ) -> Option<(String, Self)> {
+                let col = store.collection(#collection);
+                col.find_one(adapto_store::Query::eq(field, value))
+                    .ok()
+                    .flatten()
+                    .and_then(|doc| {
+                        let id = doc.id.clone();
+                        Self::from_document(&doc).map(|r| (id, r))
+                    })
+            }
+
+            /// Delete all resources matching a query. Returns count deleted.
+            pub fn delete_where(
+                store: &adapto_store::AdaptoStore,
+                query: adapto_store::Query,
+            ) -> Result<u64, adapto_store::StoreError> {
+                let col = store.collection(#collection);
+                col.delete(query)
+            }
+
+            /// Check if a resource exists by field value.
+            pub fn exists(
+                store: &adapto_store::AdaptoStore,
+                field: &str,
+                value: impl Into<serde_json::Value>,
+            ) -> bool {
+                let col = store.collection(#collection);
+                col.find_one(adapto_store::Query::eq(field, value))
+                    .ok()
+                    .flatten()
+                    .is_some()
+            }
         }
     };
 

@@ -111,3 +111,78 @@ fn test_delete() {
     assert!(User::delete(&store, &id));
     assert!(User::find_by_id(&store, &id).is_none());
 }
+
+#[test]
+fn test_find_one_by() {
+    let store = adapto_store::AdaptoStore::open(None).unwrap();
+    User::ensure_indexes(&store);
+
+    let u = User {
+        name: "FindMe".into(),
+        email: "findme@test.com".into(),
+        status: "active".into(),
+    };
+    u.insert_into(&store).unwrap();
+
+    let found = User::find_one_by(&store, "email", "findme@test.com");
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().1.name, "FindMe");
+
+    assert!(User::find_one_by(&store, "email", "nobody@test.com").is_none());
+}
+
+#[test]
+fn test_exists() {
+    let store = adapto_store::AdaptoStore::open(None).unwrap();
+    User::ensure_indexes(&store);
+
+    let u = User {
+        name: "Exists".into(),
+        email: "exists@test.com".into(),
+        status: "active".into(),
+    };
+    u.insert_into(&store).unwrap();
+
+    assert!(User::exists(&store, "email", "exists@test.com"));
+    assert!(!User::exists(&store, "email", "nope@test.com"));
+}
+
+#[test]
+fn test_update_in() {
+    let store = adapto_store::AdaptoStore::open(None).unwrap();
+
+    let u = User {
+        name: "Original".into(),
+        email: "upd@test.com".into(),
+        status: "active".into(),
+    };
+    let id = u.insert_into(&store).unwrap();
+
+    let updated = User {
+        name: "Updated".into(),
+        email: "upd@test.com".into(),
+        status: "inactive".into(),
+    };
+    assert!(updated.update_in(&store, &id).unwrap());
+
+    let (_, found) = User::find_by_id(&store, &id).unwrap();
+    assert_eq!(found.name, "Updated");
+    assert_eq!(found.status, "inactive");
+}
+
+#[test]
+fn test_delete_where() {
+    let store = adapto_store::AdaptoStore::open(None).unwrap();
+
+    for i in 0..3 {
+        let u = User {
+            name: format!("DelW{}", i),
+            email: format!("delw{}@test.com", i),
+            status: "temp".into(),
+        };
+        u.insert_into(&store).unwrap();
+    }
+
+    let deleted = User::delete_where(&store, adapto_store::Query::eq("status", "temp")).unwrap();
+    assert_eq!(deleted, 3);
+}
