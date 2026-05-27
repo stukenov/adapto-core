@@ -91,32 +91,75 @@ impl WriteAheadLog {
     }
 
     /// Read all entries from the log, starting from the last snapshot (if any).
+    ///
+    /// Tolerates incomplete trailing entries (e.g. from a crash mid-write):
+    /// if the final line(s) cannot be parsed, they are skipped and the WAL
+    /// is truncated to remove them on the next write.
     pub fn replay(&self) -> Result<Vec<WalEntry>, StoreError> {
         let file = File::open(&self.path)?;
         let reader = BufReader::new(file);
 
         let mut all_entries = Vec::new();
         let mut last_snapshot_idx: Option<usize> = None;
+        let mut lines_raw: Vec<String> = Vec::new();
 
-        for (i, line) in reader.lines().enumerate() {
-            let line = line?;
+        for line_result in reader.lines() {
+            let line = line_result?;
             if line.trim().is_empty() {
                 continue;
             }
-            let entry: WalEntry = serde_json::from_str(&line)
-                .map_err(|e| StoreError::WalCorrupted(format!("line {}: {}", i + 1, e)))?;
-            if matches!(entry, WalEntry::Snapshot { .. }) {
-                last_snapshot_idx = Some(all_entries.len());
-            }
-            all_entries.push(entry);
+            lines_raw.push(line);
         }
 
-        // If there is a snapshot, return only the snapshot and entries after it.
+        let total = lines_raw.len();
+        for (i, line) in lines_raw.iter().enumerate() {
+            match serde_json::from_str::<WalEntry>(line) {
+                Ok(entry) => {
+                    if matches!(entry, WalEntry::Snapshot { .. }) {
+                        last_snapshot_idx = Some(all_entries.len());
+                    }
+                    all_entries.push(entry);
+                }
+                Err(e) => {
+                    if i + 1 >= total {
+                        // Last line is corrupted — truncated write from crash.
+                        // Rewrite WAL without it.
+                        eprintln!(
+                            "WAL: truncating incomplete entry at line {} (last): {}",
+                            i + 1, e
+                        );
+                        self.truncate_to_entries(&all_entries)?;
+                        break;
+                    }
+                    // Corruption in the middle is a real error.
+                    return Err(StoreError::WalCorrupted(format!(
+                        "line {}: {}", i + 1, e
+                    )));
+                }
+            }
+        }
+
         if let Some(idx) = last_snapshot_idx {
             Ok(all_entries.into_iter().skip(idx).collect())
         } else {
             Ok(all_entries)
         }
+    }
+
+    /// Rewrite WAL with only the given entries (used for crash recovery).
+    fn truncate_to_entries(&self, entries: &[WalEntry]) -> Result<(), StoreError> {
+        let tmp_path = self.path.with_extension("wal.recovery");
+        {
+            let mut tmp = File::create(&tmp_path)?;
+            for entry in entries {
+                let line = serde_json::to_string(entry)
+                    .map_err(|e| StoreError::Serialization(e.to_string()))?;
+                writeln!(tmp, "{}", line)?;
+            }
+            tmp.sync_all()?;
+        }
+        fs::rename(&tmp_path, &self.path)?;
+        Ok(())
     }
 
     /// Write a snapshot entry and truncate the log to only that entry.
@@ -144,5 +187,12 @@ impl WriteAheadLog {
     /// Current size of the WAL file in bytes.
     pub fn size_bytes(&self) -> u64 {
         fs::metadata(&self.path).map(|m| m.len()).unwrap_or(0)
+    }
+}
+
+impl Drop for WriteAheadLog {
+    fn drop(&mut self) {
+        let _ = self.file.flush();
+        let _ = self.file.sync_all();
     }
 }

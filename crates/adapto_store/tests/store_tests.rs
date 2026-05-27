@@ -974,3 +974,158 @@ fn wal_persists_indexes() {
         assert!(matches!(result, Err(StoreError::DuplicateKey { .. })));
     }
 }
+
+// ---------------------------------------------------------------------------
+// 14. WAL crash recovery (BUG-001)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn wal_recovery_truncated_last_line() {
+    let dir = tempdir::TempDir::new();
+
+    // Write valid data.
+    {
+        let store = AdaptoStore::open(Some(dir.path())).unwrap();
+        let col = store.collection("users");
+        col.insert(json!({"name": "Alice"})).unwrap();
+        col.insert(json!({"name": "Bob"})).unwrap();
+    }
+
+    // Simulate crash: append garbage to WAL (truncated JSON).
+    let wal_path = format!("{}/store.wal", dir.path());
+    {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&wal_path)
+            .unwrap();
+        writeln!(f, r#"{{"Insert":{{"collection":"users","doc_id":"crash","data":{{"name":"Trun"#).unwrap();
+    }
+
+    // Reopen should recover — skip corrupted last line, keep valid entries.
+    let store = AdaptoStore::open(Some(dir.path())).unwrap();
+    let col = store.collection("users");
+    assert_eq!(col.count_all(), 2);
+}
+
+#[test]
+fn wal_recovery_trailing_garbage_bytes() {
+    let dir = tempdir::TempDir::new();
+
+    {
+        let store = AdaptoStore::open(Some(dir.path())).unwrap();
+        let col = store.collection("items");
+        col.insert(json!({"x": 1})).unwrap();
+        col.insert(json!({"x": 2})).unwrap();
+        col.insert(json!({"x": 3})).unwrap();
+    }
+
+    // Append invalid non-JSON line.
+    let wal_path = format!("{}/store.wal", dir.path());
+    {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&wal_path)
+            .unwrap();
+        writeln!(f, "not valid json at all").unwrap();
+    }
+
+    let store = AdaptoStore::open(Some(dir.path())).unwrap();
+    let col = store.collection("items");
+    assert_eq!(col.count_all(), 3);
+}
+
+#[test]
+fn wal_recovery_empty_trailing_line() {
+    let dir = tempdir::TempDir::new();
+
+    {
+        let store = AdaptoStore::open(Some(dir.path())).unwrap();
+        let col = store.collection("data");
+        col.insert(json!({"v": 42})).unwrap();
+    }
+
+    // Empty lines at end should be harmless.
+    let wal_path = format!("{}/store.wal", dir.path());
+    {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&wal_path)
+            .unwrap();
+        writeln!(f).unwrap();
+        writeln!(f).unwrap();
+    }
+
+    let store = AdaptoStore::open(Some(dir.path())).unwrap();
+    assert_eq!(store.collection("data").count_all(), 1);
+}
+
+#[test]
+fn wal_mid_file_corruption_still_errors() {
+    let dir = tempdir::TempDir::new();
+
+    {
+        let store = AdaptoStore::open(Some(dir.path())).unwrap();
+        let col = store.collection("test");
+        col.insert(json!({"a": 1})).unwrap();
+        col.insert(json!({"a": 2})).unwrap();
+        col.insert(json!({"a": 3})).unwrap();
+    }
+
+    // Insert garbage in the MIDDLE (not at end).
+    let wal_path = format!("{}/store.wal", dir.path());
+    let content = std::fs::read_to_string(&wal_path).unwrap();
+    let lines: Vec<&str> = content.lines().collect();
+    assert!(lines.len() >= 3);
+    let mut corrupted = String::new();
+    corrupted.push_str(lines[0]);
+    corrupted.push('\n');
+    corrupted.push_str("CORRUPTED LINE IN MIDDLE\n");
+    corrupted.push_str(lines[1]);
+    corrupted.push('\n');
+    corrupted.push_str(lines[2]);
+    corrupted.push('\n');
+    std::fs::write(&wal_path, corrupted).unwrap();
+
+    // Mid-file corruption should still error (not silently skip).
+    let result = AdaptoStore::open(Some(dir.path()));
+    assert!(result.is_err());
+}
+
+#[test]
+fn wal_recovery_preserves_data_after_truncation() {
+    let dir = tempdir::TempDir::new();
+
+    {
+        let store = AdaptoStore::open(Some(dir.path())).unwrap();
+        let col = store.collection("users");
+        col.insert(json!({"name": "Alice", "age": 30})).unwrap();
+        col.insert(json!({"name": "Bob", "age": 25})).unwrap();
+    }
+
+    // Append truncated entry.
+    let wal_path = format!("{}/store.wal", dir.path());
+    {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&wal_path)
+            .unwrap();
+        writeln!(f, r#"{{"Insert":{{"collection":"users","doc_"#).unwrap();
+    }
+
+    // Recovery should preserve both valid docs.
+    let store = AdaptoStore::open(Some(dir.path())).unwrap();
+    let col = store.collection("users");
+    assert_eq!(col.count_all(), 2);
+
+    // Data should still be correct.
+    let doc = col.find_one(Query::eq("name", "Alice")).unwrap().unwrap();
+    assert_eq!(doc.get_i64("age"), Some(30));
+
+    // New writes should work after recovery.
+    col.insert(json!({"name": "Charlie", "age": 35})).unwrap();
+    assert_eq!(col.count_all(), 3);
+}
