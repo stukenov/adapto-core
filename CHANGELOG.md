@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+#### Phase 5: JS Client Runtime
+- **adapto-client.js** — full client runtime (~400 LOC) replacing 22-line inline script. All 15 PatchOp handlers, WebSocket with exponential backoff reconnection + jitter, heartbeat keepalive, event delegation (click/input/change/submit/keydown/keyup/focus/blur), form serialization (text/checkbox/radio/select/multi-select), modifier support (prevent/stop/debounce/throttle), flash notification system with ARIA live region, modal dialog with Escape key + backdrop dismiss + focus trap, post-redirect flash via sessionStorage, public API via `window.__adapto`. (`static/adapto-client.js`)
+- **server.rs** — `handle_client_js()` now uses `include_str!` for static file instead of inline JS. (`server.rs`)
+- **renderer.rs** — `websocket_url` simplified from `/ws/{session_id}` to `/ws` — session ID sent as first WS message. (`renderer.rs`)
+- **17 Phase 5 tests** — JS content verification (all 15 PatchOps, event delegation, form serialization, modifiers, reconnection, heartbeat, flash, modal, public API), bootstrap websocket_url format, protocol JSON shape tests (event, patch, form_submit, navigate, error, redirect, all 15 PatchOp serialization). (`ssr_tests.rs`)
+
 #### Phase 4: Project Loader + Auto-Discovery
 - **ProjectLoader** — `load_project(path, secret)` scans directory tree for `.adapto` files, parses and compiles all, registers components/routes/resources/layouts into a `CompiledProject` struct. Skips `.`-prefixed dirs, `target/`, `node_modules/`. (`project.rs`)
 - **CompiledProject** — holds `PageRenderer`, `LayoutManager`, `RouteManifest`, `ResourceManager` map, `DependencyGraph` map, `ComponentIR` map, file count. (`project.rs`)

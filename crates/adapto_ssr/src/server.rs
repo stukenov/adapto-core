@@ -300,43 +300,12 @@ fn extract_session_id(payload: &ClientPayload) -> String {
 }
 
 /// Serve the client-side JavaScript runtime.
-///
-/// In production this would serve the compiled client bundle from
-/// the build output directory. For now, a minimal bootstrap script
-/// that reads the `__ADAPTO_BOOTSTRAP__` payload and establishes
-/// the WebSocket connection.
 async fn handle_client_js() -> impl IntoResponse {
-    let js = r#"(function() {
-  "use strict";
-  var el = document.getElementById("__ADAPTO_BOOTSTRAP__");
-  if (!el) return;
-  var config = JSON.parse(el.textContent);
-  var ws = new WebSocket(
-    (location.protocol === "https:" ? "wss://" : "ws://") +
-    location.host + config.websocket_url
-  );
-  ws.onopen = function() {
-    console.log("[adapto] connected", config.session_id);
-  };
-  ws.onmessage = function(e) {
-    var msg = JSON.parse(e.data);
-    if (msg.type === "patch") {
-      msg.ops.forEach(function(op) {
-        if (op.op === "replace_text") {
-          var target = document.querySelector('[data-ar-dyn="' + op.target + '"]');
-          if (target) target.textContent = op.value;
-        }
-      });
-    }
-  };
-  window.__adapto = { ws: ws, config: config };
-})();
-"#;
-
+    const JS: &str = include_str!("../static/adapto-client.js");
     (
         StatusCode::OK,
         [("content-type", "application/javascript; charset=utf-8")],
-        js,
+        JS,
     )
 }
 

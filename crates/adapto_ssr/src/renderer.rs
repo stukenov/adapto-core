@@ -305,7 +305,7 @@ impl Renderer {
 
         BootstrapPayload {
             session_id: session_id.to_string(),
-            websocket_url: format!("/ws/{}", session_id),
+            websocket_url: "/ws".to_string(),
             csrf_token,
             initial_state_hash: state_hash,
             component_tree: vec![component_meta],

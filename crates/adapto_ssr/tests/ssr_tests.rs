@@ -1266,3 +1266,244 @@ fn phase1_five_items_loop() {
         assert!(html.contains(v), "should contain {}", v);
     }
 }
+
+// ===========================================================================
+// Phase 5: JS Client Runtime — protocol & HTML integration tests
+// ===========================================================================
+
+#[test]
+fn phase5_client_js_is_included() {
+    let js = include_str!("../static/adapto-client.js");
+    assert!(js.contains("__ADAPTO_BOOTSTRAP__"), "reads bootstrap");
+    assert!(js.contains("WebSocket"), "creates WebSocket");
+    assert!(js.contains("replace_text"), "handles replace_text");
+    assert!(js.contains("replace_html"), "handles replace_html");
+    assert!(js.contains("set_attr"), "handles set_attr");
+    assert!(js.contains("remove_attr"), "handles remove_attr");
+    assert!(js.contains("add_class"), "handles add_class");
+    assert!(js.contains("remove_class"), "handles remove_class");
+    assert!(js.contains("insert_before"), "handles insert_before");
+    assert!(js.contains("insert_after"), "handles insert_after");
+    assert!(js.contains("remove_node"), "handles remove_node");
+    assert!(js.contains("scroll_to"), "handles scroll_to");
+    assert!(js.contains("modal_open"), "handles modal_open");
+    assert!(js.contains("modal_close"), "handles modal_close");
+    assert!(js.contains("redirect"), "handles redirect");
+    assert!(js.contains("flash"), "handles flash");
+    assert!(js.contains("focus"), "handles focus");
+}
+
+#[test]
+fn phase5_client_js_event_delegation() {
+    let js = include_str!("../static/adapto-client.js");
+    assert!(js.contains("data-ar-"), "event delegation uses data-ar-");
+    assert!(js.contains("\"click\""), "handles click events");
+    assert!(js.contains("\"input\""), "handles input events");
+    assert!(js.contains("\"change\""), "handles change events");
+    assert!(js.contains("\"submit\""), "handles submit events");
+}
+
+#[test]
+fn phase5_client_js_form_serialization() {
+    let js = include_str!("../static/adapto-client.js");
+    assert!(js.contains("serializeForm"), "form serializer exists");
+    assert!(js.contains("form_submit"), "sends form_submit type");
+    assert!(js.contains("checkbox"), "handles checkboxes");
+    assert!(js.contains("radio"), "handles radio buttons");
+    assert!(js.contains("multiple"), "handles multi-select");
+}
+
+#[test]
+fn phase5_client_js_modifiers() {
+    let js = include_str!("../static/adapto-client.js");
+    assert!(js.contains("prevent"), "prevent modifier");
+    assert!(js.contains("stopPropagation"), "stop modifier");
+    assert!(js.contains("debounce"), "debounce modifier");
+    assert!(js.contains("throttle"), "throttle modifier");
+}
+
+#[test]
+fn phase5_client_js_reconnection() {
+    let js = include_str!("../static/adapto-client.js");
+    assert!(js.contains("reconnectAttempt"), "tracks reconnect attempts");
+    assert!(js.contains("scheduleReconnect"), "schedules reconnection");
+    assert!(js.contains("Math.pow"), "exponential backoff");
+}
+
+#[test]
+fn phase5_client_js_heartbeat() {
+    let js = include_str!("../static/adapto-client.js");
+    assert!(js.contains("heartbeat"), "sends heartbeats");
+    assert!(js.contains("heartbeat_ack"), "handles heartbeat_ack");
+    assert!(js.contains("setInterval"), "periodic heartbeat");
+}
+
+#[test]
+fn phase5_client_js_flash_system() {
+    let js = include_str!("../static/adapto-client.js");
+    assert!(js.contains("adapto-flash"), "flash container");
+    assert!(js.contains("aria-live"), "accessible flash");
+    assert!(js.contains("__adapto_flash"), "persisted flash via sessionStorage");
+}
+
+#[test]
+fn phase5_client_js_modal_system() {
+    let js = include_str!("../static/adapto-client.js");
+    assert!(js.contains("adapto-modal-overlay"), "modal overlay class");
+    assert!(js.contains("aria-modal"), "accessible modal");
+    assert!(js.contains("Escape"), "escape key closes modal");
+}
+
+#[test]
+fn phase5_client_js_public_api() {
+    let js = include_str!("../static/adapto-client.js");
+    assert!(js.contains("window.__adapto"), "exports public API");
+    assert!(js.contains("connected"), "exposes connected status");
+}
+
+#[test]
+fn phase5_bootstrap_websocket_url_simple() {
+    let renderer = Renderer::new(b"secret");
+    let ir = static_ir("ws_test", "WsTest");
+    let state = StateStore::new();
+    let html = renderer.render_page(&ir, &state, None).unwrap();
+    assert!(html.contains("\"/ws\""), "websocket_url should be /ws without session_id");
+}
+
+#[test]
+fn phase5_protocol_event_json_shape() {
+    use adapto_client_protocol::event::{ClientEvent, ClientPayload, ClientMessage};
+    let msg = ClientMessage {
+        v: 1,
+        payload: ClientPayload::Event(ClientEvent {
+            session: "abc-123".into(),
+            component: "counter".into(),
+            event: "click".into(),
+            handler: "increment".into(),
+            payload: std::collections::HashMap::new(),
+            seq: 1,
+        }),
+    };
+    let json = serde_json::to_value(&msg).unwrap();
+    assert_eq!(json["v"], 1);
+    assert_eq!(json["type"], "event");
+    assert_eq!(json["session"], "abc-123");
+    assert_eq!(json["handler"], "increment");
+    assert_eq!(json["seq"], 1);
+}
+
+#[test]
+fn phase5_protocol_patch_json_shape() {
+    use adapto_client_protocol::patch::{PatchOp, PatchMessage};
+    use adapto_client_protocol::patch::ServerPayload;
+    let patch = ServerPayload::Patch(PatchMessage {
+        seq: 5,
+        ops: vec![
+            PatchOp::ReplaceText { target: "dyn_0".into(), value: "42".into() },
+            PatchOp::AddClass { target: "el_1".into(), class: "active".into() },
+            PatchOp::SetAttr { target: "el_2".into(), name: "disabled".into(), value: "true".into() },
+        ],
+    });
+    let json = serde_json::to_value(&patch).unwrap();
+    assert_eq!(json["type"], "patch");
+    assert_eq!(json["seq"], 5);
+    let ops = json["ops"].as_array().unwrap();
+    assert_eq!(ops.len(), 3);
+    assert_eq!(ops[0]["op"], "replace_text");
+    assert_eq!(ops[0]["target"], "dyn_0");
+    assert_eq!(ops[0]["value"], "42");
+    assert_eq!(ops[1]["op"], "add_class");
+    assert_eq!(ops[2]["op"], "set_attr");
+}
+
+#[test]
+fn phase5_protocol_form_submit_json() {
+    use adapto_client_protocol::event::{FormSubmitEvent, ClientPayload, ClientMessage};
+    let mut form = std::collections::HashMap::new();
+    form.insert("name".into(), json!("Alice"));
+    form.insert("email".into(), json!("alice@test.com"));
+    form.insert("agreed".into(), json!(true));
+    let msg = ClientMessage {
+        v: 1,
+        payload: ClientPayload::FormSubmit(FormSubmitEvent {
+            session: "s1".into(),
+            component: "signup".into(),
+            handler: "create_user".into(),
+            form,
+            seq: 3,
+        }),
+    };
+    let json = serde_json::to_value(&msg).unwrap();
+    assert_eq!(json["type"], "form_submit");
+    assert_eq!(json["form"]["name"], "Alice");
+    assert_eq!(json["form"]["agreed"], true);
+}
+
+#[test]
+fn phase5_protocol_all_patch_ops_serialize() {
+    use adapto_client_protocol::patch::{PatchOp, FlashLevel};
+    let ops = vec![
+        PatchOp::ReplaceText { target: "t".into(), value: "v".into() },
+        PatchOp::ReplaceHtml { target: "t".into(), html: "<b>v</b>".into() },
+        PatchOp::SetAttr { target: "t".into(), name: "n".into(), value: "v".into() },
+        PatchOp::RemoveAttr { target: "t".into(), name: "n".into() },
+        PatchOp::AddClass { target: "t".into(), class: "c".into() },
+        PatchOp::RemoveClass { target: "t".into(), class: "c".into() },
+        PatchOp::InsertBefore { target: "t".into(), html: "<i/>".into() },
+        PatchOp::InsertAfter { target: "t".into(), html: "<i/>".into() },
+        PatchOp::RemoveNode { target: "t".into() },
+        PatchOp::Focus { target: "t".into() },
+        PatchOp::ScrollTo { target: "t".into() },
+        PatchOp::Redirect { url: "/home".into() },
+        PatchOp::Flash { level: FlashLevel::Success, message: "ok".into() },
+        PatchOp::ModalOpen { id: "m1".into(), html: "<p>hi</p>".into() },
+        PatchOp::ModalClose { id: "m1".into() },
+    ];
+    for op in &ops {
+        let json = serde_json::to_value(op).unwrap();
+        assert!(json.get("op").is_some(), "each PatchOp must have 'op' field");
+    }
+    assert_eq!(ops.len(), 15, "all 15 PatchOp variants covered");
+}
+
+#[test]
+fn phase5_protocol_navigate_json() {
+    use adapto_client_protocol::event::{NavigateEvent, ClientPayload, ClientMessage};
+    let msg = ClientMessage {
+        v: 1,
+        payload: ClientPayload::Navigate(NavigateEvent {
+            session: "s1".into(),
+            path: "/dashboard".into(),
+            seq: 7,
+        }),
+    };
+    let json = serde_json::to_value(&msg).unwrap();
+    assert_eq!(json["type"], "navigate");
+    assert_eq!(json["path"], "/dashboard");
+}
+
+#[test]
+fn phase5_protocol_error_response() {
+    use adapto_client_protocol::patch::{ServerPayload, ErrorMessage};
+    let err = ServerPayload::Error(ErrorMessage {
+        seq: Some(3),
+        code: "VALIDATION_ERROR".into(),
+        message: "missing field".into(),
+    });
+    let json = serde_json::to_value(&err).unwrap();
+    assert_eq!(json["type"], "error");
+    assert_eq!(json["code"], "VALIDATION_ERROR");
+    assert_eq!(json["seq"], 3);
+}
+
+#[test]
+fn phase5_protocol_redirect_with_flash() {
+    use adapto_client_protocol::patch::{ServerPayload, RedirectMessage, FlashLevel};
+    let redir = ServerPayload::Redirect(RedirectMessage {
+        url: "/login".into(),
+        flash: Some((FlashLevel::Warning, "Session expired".into())),
+    });
+    let json = serde_json::to_value(&redir).unwrap();
+    assert_eq!(json["type"], "redirect");
+    assert_eq!(json["url"], "/login");
+}
