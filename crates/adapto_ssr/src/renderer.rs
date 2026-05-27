@@ -1,6 +1,6 @@
 use adapto_auth::csrf;
 use adapto_client_protocol::session::{BootstrapPayload, ComponentMeta, DynamicTarget};
-use adapto_compiler::ir::{ComponentIR, DynamicSegment, EventIR, SegmentType};
+use adapto_compiler::ir::{ComponentIR, DynamicSegment, EventIR, SegmentBody, SegmentType};
 use adapto_runtime::state::StateStore;
 use serde_json::Value;
 use uuid::Uuid;
@@ -91,21 +91,41 @@ impl Renderer {
             out.push_str(static_part);
 
             if let Some(dyn_seg) = dynamic_parts.get(i) {
-                let value = self.eval_expr(&dyn_seg.expr, state);
-                match dyn_seg.segment_type {
-                    SegmentType::Attribute { ref element_id, ref attr_name } => {
-                        // Attribute bindings are handled inline in the
-                        // static parts; we just need the value.
+                match &dyn_seg.segment_type {
+                    SegmentType::Attribute { element_id, attr_name } => {
+                        let value = self.eval_expr(&dyn_seg.expr, state);
                         out.push_str(&format!(
                             " data-ar-bind-{}=\"{}\" {}=\"{}\"",
                             element_id, dyn_seg.id, attr_name, html_escape(&value)
                         ));
                     }
-                    _ => {
+                    SegmentType::Conditional => {
+                        out.push_str(&format!("<span data-ar-dyn=\"{}\">", dyn_seg.id));
+                        out.push_str(&self.render_conditional(dyn_seg, state));
+                        out.push_str("</span>");
+                    }
+                    SegmentType::Loop => {
+                        out.push_str(&format!("<span data-ar-dyn=\"{}\">", dyn_seg.id));
+                        out.push_str(&self.render_loop(dyn_seg, state));
+                        out.push_str("</span>");
+                    }
+                    SegmentType::Permission => {
+                        out.push_str(&format!("<span data-ar-dyn=\"{}\">", dyn_seg.id));
+                        if let Some(ref body) = dyn_seg.permission_body {
+                            out.push_str(&self.render_body(body, state));
+                        }
+                        out.push_str("</span>");
+                    }
+                    SegmentType::Text | SegmentType::Html => {
+                        let value = self.eval_expr(&dyn_seg.expr, state);
+                        let content = if matches!(dyn_seg.segment_type, SegmentType::Html) {
+                            value
+                        } else {
+                            html_escape(&value)
+                        };
                         out.push_str(&format!(
                             "<span data-ar-dyn=\"{}\">{}</span>",
-                            dyn_seg.id,
-                            html_escape(&value)
+                            dyn_seg.id, content
                         ));
                     }
                 }
@@ -113,6 +133,82 @@ impl Renderer {
         }
 
         out
+    }
+
+    fn render_conditional(&self, seg: &DynamicSegment, state: &StateStore) -> String {
+        let condition_val = self.eval_expr(&seg.expr, state);
+        if is_truthy(&condition_val) {
+            if let Some(ref body) = seg.then_body {
+                return self.render_body(body, state);
+            }
+        }
+
+        for (cond, body) in &seg.else_if_bodies {
+            let val = self.eval_expr(cond, state);
+            if is_truthy(&val) {
+                return self.render_body(body, state);
+            }
+        }
+
+        if let Some(ref body) = seg.else_body {
+            return self.render_body(body, state);
+        }
+
+        String::new()
+    }
+
+    fn render_loop(&self, seg: &DynamicSegment, state: &StateStore) -> String {
+        let Some(ref loop_body) = seg.loop_body else {
+            return String::new();
+        };
+
+        let iterable_val = self.eval_expr_raw(&seg.expr, state);
+        let items = match iterable_val {
+            Value::Array(arr) => arr,
+            _ => return String::new(),
+        };
+
+        let mut out = String::new();
+        for (idx, item) in items.iter().enumerate() {
+            let mut scoped = state.clone();
+            scoped.set(&loop_body.item_var, item.clone());
+            if let Some(ref index_var) = loop_body.index_var {
+                scoped.set(index_var, Value::Number(idx.into()));
+            }
+            out.push_str(&self.render_body(&loop_body.body, &scoped));
+        }
+        out
+    }
+
+    fn render_body(&self, body: &SegmentBody, state: &StateStore) -> String {
+        self.render_segments(&body.static_segments, &body.dynamic_segments, state)
+    }
+
+    fn eval_expr_raw(&self, expr: &str, state: &StateStore) -> Value {
+        let trimmed = expr.trim();
+
+        if let Some(val) = state.get(trimmed) {
+            return val.clone();
+        }
+
+        let bare = trimmed.strip_prefix("state.").unwrap_or(trimmed);
+        if bare != trimmed {
+            if let Some(val) = state.get(bare) {
+                return val.clone();
+            }
+        }
+
+        for key in [bare, trimmed] {
+            if let Some(dot_pos) = key.find('.') {
+                let root = &key[..dot_pos];
+                let rest = &key[dot_pos + 1..];
+                if let Some(root_val) = state.get(root) {
+                    return traverse_path(root_val, rest);
+                }
+            }
+        }
+
+        Value::Null
     }
 
     /// Render event binding markers as hidden data attributes.
@@ -161,20 +257,19 @@ impl Renderer {
             }
         }
 
-        // Try dotted path: split on the first dot, look up the root,
-        // then traverse nested objects.
-        if let Some(dot_pos) = trimmed.find('.') {
-            let root = &trimmed[..dot_pos];
-            let rest = &trimmed[dot_pos + 1..];
-
-            if let Some(root_val) = state.get(root) {
-                let result = traverse_path(root_val, rest);
-                return value_to_string(&result);
+        // Try dotted path on bare (state.-stripped) expression first,
+        // then fall back to the original.
+        for key in [bare, trimmed] {
+            if let Some(dot_pos) = key.find('.') {
+                let root = &key[..dot_pos];
+                let rest = &key[dot_pos + 1..];
+                if let Some(root_val) = state.get(root) {
+                    let result = traverse_path(root_val, rest);
+                    return value_to_string(&result);
+                }
             }
         }
 
-        // Expression not resolvable — return the raw expression as a
-        // readable placeholder.
         format!("{{{}}}", trimmed)
     }
 
@@ -289,6 +384,11 @@ fn traverse_path<'a>(val: &'a Value, path: &str) -> Value {
     current.clone()
 }
 
+/// Check if a rendered value is truthy (for conditionals).
+fn is_truthy(val: &str) -> bool {
+    !val.is_empty() && val != "false" && val != "0" && val != "null" && val != "{}" && val != "[]"
+}
+
 /// Minimal HTML entity escaping for dynamic values.
 fn html_escape(input: &str) -> String {
     input
@@ -332,18 +432,18 @@ mod tests {
                 "</p>".into(),
             ],
             dynamic_segments: vec![
-                DynamicSegment {
-                    id: "dyn_0".into(),
-                    expr: "title".into(),
-                    deps: vec!["title".into()],
-                    segment_type: SegmentType::Text,
-                },
-                DynamicSegment {
-                    id: "dyn_1".into(),
-                    expr: "count".into(),
-                    deps: vec!["count".into()],
-                    segment_type: SegmentType::Text,
-                },
+                DynamicSegment::new(
+                    "dyn_0".into(),
+                    "title".into(),
+                    vec!["title".into()],
+                    SegmentType::Text,
+                ),
+                DynamicSegment::new(
+                    "dyn_1".into(),
+                    "count".into(),
+                    vec!["count".into()],
+                    SegmentType::Text,
+                ),
             ],
             events: vec![],
             actions: vec![],

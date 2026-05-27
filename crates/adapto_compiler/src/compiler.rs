@@ -231,12 +231,12 @@ impl Compiler {
                 }
                 let dyn_id = self.next_dyn_id();
                 let deps = extract_deps_from_expr(&expr_node.expr);
-                dynamic_parts.push(DynamicSegment {
-                    id: dyn_id,
-                    expr: format!("state.{}", expr_node.expr),
+                dynamic_parts.push(DynamicSegment::new(
+                    dyn_id,
+                    format!("state.{}", expr_node.expr),
                     deps,
-                    segment_type: SegmentType::Text,
-                });
+                    SegmentType::Text,
+                ));
             }
 
             TemplateNode::UnsafeHtml(expr) => {
@@ -245,12 +245,12 @@ impl Compiler {
                 }
                 let dyn_id = self.next_dyn_id();
                 let deps = extract_deps_from_expr(expr);
-                dynamic_parts.push(DynamicSegment {
-                    id: dyn_id,
-                    expr: format!("state.{}", expr),
+                dynamic_parts.push(DynamicSegment::new(
+                    dyn_id,
+                    format!("state.{}", expr),
                     deps,
-                    segment_type: SegmentType::Html,
-                });
+                    SegmentType::Html,
+                ));
             }
 
             TemplateNode::Element(elem) => {
@@ -268,15 +268,15 @@ impl Compiler {
                         AttributeValue::Dynamic(expr) => {
                             let dyn_id = self.next_dyn_id();
                             let deps = extract_deps_from_expr(expr);
-                            dynamic_parts.push(DynamicSegment {
-                                id: dyn_id,
-                                expr: format!("state.{}", expr),
+                            dynamic_parts.push(DynamicSegment::new(
+                                dyn_id,
+                                format!("state.{}", expr),
                                 deps,
-                                segment_type: SegmentType::Attribute {
+                                SegmentType::Attribute {
                                     element_id: element_id.clone(),
                                     attr_name: attr.name.clone(),
                                 },
-                            });
+                            ));
                             open_tag.push_str(&format!(
                                 " {}=\"\"",
                                 attr.name
@@ -350,130 +350,100 @@ impl Compiler {
             }
 
             TemplateNode::If(if_node) => {
+                if static_parts.len() <= dynamic_parts.len() {
+                    static_parts.push(String::new());
+                }
                 let dyn_id = self.next_dyn_id();
                 let deps = extract_deps_from_expr(&if_node.condition);
-                dynamic_parts.push(DynamicSegment {
-                    id: dyn_id,
-                    expr: if_node.condition.clone(),
-                    deps,
-                    segment_type: SegmentType::Conditional,
-                });
 
-                // Compile then branch
-                for child in &if_node.then_branch {
-                    self.compile_node(
-                        child,
-                        static_parts,
-                        dynamic_parts,
-                        events,
-                        component_id,
-                        source_path,
-                    )?;
-                }
+                let then_body = self.compile_body(&if_node.then_branch, component_id, source_path, events)?;
 
-                // Compile else-if branches
+                let mut else_if_bodies = Vec::new();
                 for (cond, branch) in &if_node.else_if_branches {
-                    let dyn_id = self.next_dyn_id();
-                    let deps = extract_deps_from_expr(cond);
-                    dynamic_parts.push(DynamicSegment {
-                        id: dyn_id,
-                        expr: cond.clone(),
-                        deps,
-                        segment_type: SegmentType::Conditional,
-                    });
-                    for child in branch {
-                        self.compile_node(
-                            child,
-                            static_parts,
-                            dynamic_parts,
-                            events,
-                            component_id,
-                            source_path,
-                        )?;
-                    }
+                    let body = self.compile_body(branch, component_id, source_path, events)?;
+                    else_if_bodies.push((cond.clone(), body));
                 }
 
-                // Compile else branch
-                if let Some(else_branch) = &if_node.else_branch {
-                    for child in else_branch {
-                        self.compile_node(
-                            child,
-                            static_parts,
-                            dynamic_parts,
-                            events,
-                            component_id,
-                            source_path,
-                        )?;
-                    }
-                }
+                let else_body = if let Some(ref else_branch) = if_node.else_branch {
+                    Some(self.compile_body(else_branch, component_id, source_path, events)?)
+                } else {
+                    None
+                };
+
+                let mut seg = DynamicSegment::new(
+                    dyn_id,
+                    if_node.condition.clone(),
+                    deps,
+                    SegmentType::Conditional,
+                );
+                seg.then_body = Some(then_body);
+                seg.else_if_bodies = else_if_bodies;
+                seg.else_body = else_body;
+                dynamic_parts.push(seg);
             }
 
             TemplateNode::Each(each_node) => {
+                if static_parts.len() <= dynamic_parts.len() {
+                    static_parts.push(String::new());
+                }
                 let dyn_id = self.next_dyn_id();
                 let deps = extract_deps_from_expr(&each_node.iterable);
-                dynamic_parts.push(DynamicSegment {
-                    id: dyn_id,
-                    expr: each_node.iterable.clone(),
-                    deps,
-                    segment_type: SegmentType::Loop,
-                });
 
-                // Compile children of the loop body
-                for child in &each_node.children {
-                    self.compile_node(
-                        child,
-                        static_parts,
-                        dynamic_parts,
-                        events,
-                        component_id,
-                        source_path,
-                    )?;
-                }
+                let body = self.compile_body(&each_node.children, component_id, source_path, events)?;
+
+                let mut seg = DynamicSegment::new(
+                    dyn_id,
+                    each_node.iterable.clone(),
+                    deps,
+                    SegmentType::Loop,
+                );
+                seg.loop_body = Some(LoopBody {
+                    item_var: each_node.item.clone(),
+                    index_var: each_node.index.clone(),
+                    body,
+                });
+                dynamic_parts.push(seg);
             }
 
             TemplateNode::Match(match_node) => {
+                if static_parts.len() <= dynamic_parts.len() {
+                    static_parts.push(String::new());
+                }
                 let dyn_id = self.next_dyn_id();
                 let deps = extract_deps_from_expr(&match_node.expr);
-                dynamic_parts.push(DynamicSegment {
-                    id: dyn_id,
-                    expr: match_node.expr.clone(),
-                    deps,
-                    segment_type: SegmentType::Conditional,
-                });
 
-                for (_pattern, children) in &match_node.arms {
-                    for child in children {
-                        self.compile_node(
-                            child,
-                            static_parts,
-                            dynamic_parts,
-                            events,
-                            component_id,
-                            source_path,
-                        )?;
-                    }
+                let mut else_if_bodies = Vec::new();
+                for (pattern, children) in &match_node.arms {
+                    let body = self.compile_body(children, component_id, source_path, events)?;
+                    else_if_bodies.push((pattern.clone(), body));
                 }
+
+                let mut seg = DynamicSegment::new(
+                    dyn_id,
+                    match_node.expr.clone(),
+                    deps,
+                    SegmentType::Conditional,
+                );
+                seg.else_if_bodies = else_if_bodies;
+                dynamic_parts.push(seg);
             }
 
             TemplateNode::Can(can_node) => {
-                let dyn_id = self.next_dyn_id();
-                dynamic_parts.push(DynamicSegment {
-                    id: dyn_id,
-                    expr: can_node.permission.clone(),
-                    deps: vec![format!("permission:{}", can_node.permission)],
-                    segment_type: SegmentType::Permission,
-                });
-
-                for child in &can_node.children {
-                    self.compile_node(
-                        child,
-                        static_parts,
-                        dynamic_parts,
-                        events,
-                        component_id,
-                        source_path,
-                    )?;
+                if static_parts.len() <= dynamic_parts.len() {
+                    static_parts.push(String::new());
                 }
+                let dyn_id = self.next_dyn_id();
+
+                let body = self.compile_body(&can_node.children, component_id, source_path, events)?;
+
+                let mut seg = DynamicSegment::new(
+                    dyn_id,
+                    can_node.permission.clone(),
+                    vec![format!("permission:{}", can_node.permission)],
+                    SegmentType::Permission,
+                );
+                seg.permission_body = Some(body);
+                dynamic_parts.push(seg);
             }
 
             TemplateNode::Slot(_slot) => {
@@ -493,15 +463,15 @@ impl Compiler {
                         AttributeValue::Dynamic(expr) => {
                             let dyn_id = self.next_dyn_id();
                             let deps = extract_deps_from_expr(expr);
-                            dynamic_parts.push(DynamicSegment {
-                                id: dyn_id,
-                                expr: format!("state.{}", expr),
+                            dynamic_parts.push(DynamicSegment::new(
+                                dyn_id,
+                                format!("state.{}", expr),
                                 deps,
-                                segment_type: SegmentType::Attribute {
+                                SegmentType::Attribute {
                                     element_id: element_id.clone(),
                                     attr_name: prop.name.clone(),
                                 },
-                            });
+                            ));
                         }
                         AttributeValue::None => {
                             tag.push_str(&format!(" {}", prop.name));
@@ -582,6 +552,34 @@ impl Compiler {
         }
 
         Ok(())
+    }
+
+    /// Compile a list of template nodes into an isolated SegmentBody.
+    fn compile_body(
+        &mut self,
+        nodes: &[TemplateNode],
+        component_id: &str,
+        source_path: &str,
+        events: &mut Vec<EventIR>,
+    ) -> Result<SegmentBody, CompileError> {
+        let mut statics = Vec::new();
+        let mut dynamics = Vec::new();
+
+        for node in nodes {
+            self.compile_node(
+                node,
+                &mut statics,
+                &mut dynamics,
+                events,
+                component_id,
+                source_path,
+            )?;
+        }
+
+        Ok(SegmentBody {
+            static_segments: statics,
+            dynamic_segments: dynamics,
+        })
     }
 
     /// Compile script block to actions, state fields, and form schemas.

@@ -24,18 +24,18 @@ fn make_ir() -> ComponentIR {
         route: None,
         static_segments: vec!["<div>".to_string(), "</div>".to_string()],
         dynamic_segments: vec![
-            DynamicSegment {
-                id: "dyn_0".to_string(),
-                expr: "counter".to_string(),
-                deps: vec!["counter".to_string()],
-                segment_type: SegmentType::Text,
-            },
-            DynamicSegment {
-                id: "dyn_1".to_string(),
-                expr: "label".to_string(),
-                deps: vec!["label".to_string()],
-                segment_type: SegmentType::Text,
-            },
+            DynamicSegment::new(
+                "dyn_0".to_string(),
+                "counter".to_string(),
+                vec!["counter".to_string()],
+                SegmentType::Text,
+            ),
+            DynamicSegment::new(
+                "dyn_1".to_string(),
+                "label".to_string(),
+                vec!["label".to_string()],
+                SegmentType::Text,
+            ),
         ],
         events: vec![],
         actions: vec![],
@@ -390,12 +390,12 @@ fn test_patch_generator_dirty_text() {
     state.set("counter", serde_json::json!(7));
 
     let dep_graph = make_dep_graph();
-    let segments = vec![DynamicSegment {
-        id: "dyn_0".to_string(),
-        expr: "counter".to_string(),
-        deps: vec!["counter".to_string()],
-        segment_type: SegmentType::Text,
-    }];
+    let segments = vec![DynamicSegment::new(
+        "dyn_0".to_string(),
+        "counter".to_string(),
+        vec!["counter".to_string()],
+        SegmentType::Text,
+    )];
 
     let ops = PatchGenerator::generate(&state, &dep_graph, &segments);
     assert_eq!(ops.len(), 1);
@@ -416,12 +416,12 @@ fn test_patch_generator_dirty_text() {
 fn test_patch_generator_no_patches_when_clean() {
     let state = StateStore::new();
     let dep_graph = make_dep_graph();
-    let segments = vec![DynamicSegment {
-        id: "dyn_0".to_string(),
-        expr: "counter".to_string(),
-        deps: vec!["counter".to_string()],
-        segment_type: SegmentType::Text,
-    }];
+    let segments = vec![DynamicSegment::new(
+        "dyn_0".to_string(),
+        "counter".to_string(),
+        vec!["counter".to_string()],
+        SegmentType::Text,
+    )];
 
     let ops = PatchGenerator::generate(&state, &dep_graph, &segments);
     assert!(ops.is_empty());
@@ -439,18 +439,18 @@ fn test_patch_generator_multiple_dirty_fields() {
 
     let dep_graph = make_dep_graph();
     let segments = vec![
-        DynamicSegment {
-            id: "dyn_0".to_string(),
-            expr: "counter".to_string(),
-            deps: vec!["counter".to_string()],
-            segment_type: SegmentType::Text,
-        },
-        DynamicSegment {
-            id: "dyn_1".to_string(),
-            expr: "label".to_string(),
-            deps: vec!["label".to_string()],
-            segment_type: SegmentType::Text,
-        },
+        DynamicSegment::new(
+            "dyn_0".to_string(),
+            "counter".to_string(),
+            vec!["counter".to_string()],
+            SegmentType::Text,
+        ),
+        DynamicSegment::new(
+            "dyn_1".to_string(),
+            "label".to_string(),
+            vec!["label".to_string()],
+            SegmentType::Text,
+        ),
     ];
 
     let ops = PatchGenerator::generate(&state, &dep_graph, &segments);
@@ -469,12 +469,12 @@ fn test_patch_generator_eval_simple() {
     let mut dep_graph = DependencyGraph::new();
     dep_graph.add_dependency("dyn_name", "name");
 
-    let segments = vec![DynamicSegment {
-        id: "dyn_name".to_string(),
-        expr: "name".to_string(),
-        deps: vec!["name".to_string()],
-        segment_type: SegmentType::Text,
-    }];
+    let segments = vec![DynamicSegment::new(
+        "dyn_name".to_string(),
+        "name".to_string(),
+        vec!["name".to_string()],
+        SegmentType::Text,
+    )];
 
     let ops = PatchGenerator::generate(&state, &dep_graph, &segments);
     assert_eq!(ops.len(), 1);
@@ -499,12 +499,12 @@ fn test_patch_generator_eval_dotted_path() {
     let mut dep_graph = DependencyGraph::new();
     dep_graph.add_dependency("dyn_cname", "customer");
 
-    let segments = vec![DynamicSegment {
-        id: "dyn_cname".to_string(),
-        expr: "customer.name".to_string(),
-        deps: vec!["customer".to_string()],
-        segment_type: SegmentType::Text,
-    }];
+    let segments = vec![DynamicSegment::new(
+        "dyn_cname".to_string(),
+        "customer.name".to_string(),
+        vec!["customer".to_string()],
+        SegmentType::Text,
+    )];
 
     let ops = PatchGenerator::generate(&state, &dep_graph, &segments);
     assert_eq!(ops.len(), 1);
@@ -835,15 +835,15 @@ fn test_patch_generator_attribute_segment() {
     let mut dep_graph = DependencyGraph::new();
     dep_graph.add_dependency("dyn_attr", "color");
 
-    let segments = vec![DynamicSegment {
-        id: "dyn_attr".to_string(),
-        expr: "color".to_string(),
-        deps: vec!["color".to_string()],
-        segment_type: SegmentType::Attribute {
+    let segments = vec![DynamicSegment::new(
+        "dyn_attr".to_string(),
+        "color".to_string(),
+        vec!["color".to_string()],
+        SegmentType::Attribute {
             element_id: "el_1".to_string(),
             attr_name: "style".to_string(),
         },
-    }];
+    )];
 
     let ops = PatchGenerator::generate(&state, &dep_graph, &segments);
     assert_eq!(ops.len(), 1);
@@ -869,12 +869,12 @@ fn test_patch_generator_html_segment() {
     let mut dep_graph = DependencyGraph::new();
     dep_graph.add_dependency("dyn_html", "content");
 
-    let segments = vec![DynamicSegment {
-        id: "dyn_html".to_string(),
-        expr: "content".to_string(),
-        deps: vec!["content".to_string()],
-        segment_type: SegmentType::Html,
-    }];
+    let segments = vec![DynamicSegment::new(
+        "dyn_html".to_string(),
+        "content".to_string(),
+        vec!["content".to_string()],
+        SegmentType::Html,
+    )];
 
     let ops = PatchGenerator::generate(&state, &dep_graph, &segments);
     assert_eq!(ops.len(), 1);

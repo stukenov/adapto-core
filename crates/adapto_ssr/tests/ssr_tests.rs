@@ -96,18 +96,8 @@ fn dynamic_ir() -> ComponentIR {
             "</p>".into(),
         ],
         dynamic_segments: vec![
-            DynamicSegment {
-                id: "dyn_0".into(),
-                expr: "title".into(),
-                deps: vec!["title".into()],
-                segment_type: SegmentType::Text,
-            },
-            DynamicSegment {
-                id: "dyn_1".into(),
-                expr: "count".into(),
-                deps: vec!["count".into()],
-                segment_type: SegmentType::Text,
-            },
+            DynamicSegment::new("dyn_0".into(), "title".into(), vec!["title".into()], SegmentType::Text),
+            DynamicSegment::new("dyn_1".into(), "count".into(), vec!["count".into()], SegmentType::Text),
         ],
         events: vec![],
         actions: vec![],
@@ -319,12 +309,7 @@ fn renderer_eval_expr_from_state() {
         name: "EvalTest".into(),
         route: None,
         static_segments: vec!["<p>".into(), "</p>".into()],
-        dynamic_segments: vec![DynamicSegment {
-            id: "dyn_eval".into(),
-            expr: "greeting".into(),
-            deps: vec!["greeting".into()],
-            segment_type: SegmentType::Text,
-        }],
+        dynamic_segments: vec![DynamicSegment::new("dyn_eval".into(), "greeting".into(), vec!["greeting".into()], SegmentType::Text)],
         events: vec![],
         actions: vec![],
         state_fields: vec![],
@@ -580,12 +565,7 @@ fn renderer_html_escapes_dynamic_values() {
         name: "EscPage".into(),
         route: None,
         static_segments: vec!["<p>".into(), "</p>".into()],
-        dynamic_segments: vec![DynamicSegment {
-            id: "dyn_esc".into(),
-            expr: "val".into(),
-            deps: vec!["val".into()],
-            segment_type: SegmentType::Text,
-        }],
+        dynamic_segments: vec![DynamicSegment::new("dyn_esc".into(), "val".into(), vec!["val".into()], SegmentType::Text)],
         events: vec![],
         actions: vec![],
         state_fields: vec![],
@@ -938,4 +918,351 @@ fn e2e_page_renderer_full_flow() {
         .expect("Page render should succeed");
 
     assert!(!response.html.is_empty(), "Should produce HTML output");
+}
+
+// ===========================================================================
+// PHASE 1: SSR Conditional & Loop Rendering
+// ===========================================================================
+
+fn compile_and_render(dsl: &str, state: &StateStore) -> String {
+    let ast = adapto_parser::parse(dsl).expect("Parse should succeed");
+    let mut compiler = Compiler::new();
+    let output = compiler
+        .compile_file(&ast, "test.adapto")
+        .expect("Compile should succeed");
+    let renderer = Renderer::new(b"test_secret");
+    renderer
+        .render_component(&output.component_ir, state)
+        .expect("Render should succeed")
+}
+
+// ---------------------------------------------------------------------------
+// Conditional: {#if show} ... {/if}
+// ---------------------------------------------------------------------------
+
+#[test]
+fn phase1_if_true_renders_then_body() {
+    let dsl = r#"
+<script>
+    state show: bool = true
+</script>
+<template>
+    {#if show}
+        <p>Visible</p>
+    {/if}
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set("show", json!(true));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Visible"), "then branch should render when show=true");
+}
+
+#[test]
+fn phase1_if_false_hides_then_body() {
+    let dsl = r#"
+<script>
+    state show: bool = false
+</script>
+<template>
+    {#if show}
+        <p>Visible</p>
+    {/if}
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set("show", json!(false));
+    let html = compile_and_render(dsl, &state);
+    assert!(!html.contains("Visible"), "then branch should NOT render when show=false");
+}
+
+#[test]
+fn phase1_if_else_renders_correct_branch() {
+    let dsl = r#"
+<script>
+    state logged_in: bool = false
+</script>
+<template>
+    {#if logged_in}
+        <p>Welcome back</p>
+    {:else}
+        <p>Please login</p>
+    {/if}
+</template>
+"#;
+    let mut state = StateStore::new();
+
+    state.set("logged_in", json!(true));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Welcome back"));
+    assert!(!html.contains("Please login"));
+
+    state.set("logged_in", json!(false));
+    let html = compile_and_render(dsl, &state);
+    assert!(!html.contains("Welcome back"));
+    assert!(html.contains("Please login"));
+}
+
+#[test]
+fn phase1_if_with_dynamic_content_inside() {
+    let dsl = r#"
+<script>
+    state show: bool = true
+    state name: String = ""
+</script>
+<template>
+    {#if show}
+        <p>Hello {name}</p>
+    {/if}
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set("show", json!(true));
+    state.set("name", json!("Alice"));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Alice"), "dynamic expr inside if should resolve");
+}
+
+#[test]
+fn phase1_if_truthy_values() {
+    let dsl = r#"
+<script>
+    state val: String = ""
+</script>
+<template>
+    {#if val}
+        <p>Has value</p>
+    {:else}
+        <p>Empty</p>
+    {/if}
+</template>
+"#;
+    let mut state = StateStore::new();
+
+    state.set("val", json!("something"));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Has value"));
+
+    state.set("val", json!(""));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Empty"));
+
+    state.set("val", json!(0));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Empty"), "0 should be falsy");
+
+    state.set("val", json!(null));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Empty"), "null should be falsy");
+}
+
+// ---------------------------------------------------------------------------
+// Loop: {#each items as item} ... {/each}
+// ---------------------------------------------------------------------------
+
+#[test]
+fn phase1_each_renders_items() {
+    let dsl = r#"
+<script>
+    state items: Vec<String> = vec![]
+</script>
+<template>
+    <ul>
+    {#each items as item}
+        <li>{item}</li>
+    {/each}
+    </ul>
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set("items", json!(["Apple", "Banana", "Cherry"]));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Apple"));
+    assert!(html.contains("Banana"));
+    assert!(html.contains("Cherry"));
+}
+
+#[test]
+fn phase1_each_empty_array() {
+    let dsl = r#"
+<script>
+    state items: Vec<String> = vec![]
+</script>
+<template>
+    <ul>
+    {#each items as item}
+        <li>{item}</li>
+    {/each}
+    </ul>
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set("items", json!([]));
+    let html = compile_and_render(dsl, &state);
+    assert!(!html.contains("<li>"), "empty array should produce no <li> elements");
+}
+
+#[test]
+fn phase1_each_single_item() {
+    let dsl = r#"
+<script>
+    state items: Vec<String> = vec![]
+</script>
+<template>
+    {#each items as item}
+        <span>{item}</span>
+    {/each}
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set("items", json!(["Only"]));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Only"));
+}
+
+#[test]
+fn phase1_each_with_index() {
+    let dsl = r#"
+<script>
+    state items: Vec<String> = vec![]
+</script>
+<template>
+    {#each items as item, idx}
+        <span>{idx}: {item}</span>
+    {/each}
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set("items", json!(["A", "B", "C"]));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("0"), "should have index 0");
+    assert!(html.contains("1"), "should have index 1");
+    assert!(html.contains("2"), "should have index 2");
+    assert!(html.contains("A"));
+    assert!(html.contains("B"));
+    assert!(html.contains("C"));
+}
+
+#[test]
+fn phase1_each_with_objects() {
+    let dsl = r#"
+<script>
+    state users: Vec<User> = vec![]
+</script>
+<template>
+    {#each users as user}
+        <div>{user.name} - {user.email}</div>
+    {/each}
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set(
+        "users",
+        json!([
+            {"name": "Alice", "email": "alice@test.com"},
+            {"name": "Bob", "email": "bob@test.com"}
+        ]),
+    );
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Alice"));
+    assert!(html.contains("alice@test.com"));
+    assert!(html.contains("Bob"));
+    assert!(html.contains("bob@test.com"));
+}
+
+// ---------------------------------------------------------------------------
+// Nested: {#if} inside {#each} and vice versa
+// ---------------------------------------------------------------------------
+
+#[test]
+fn phase1_if_inside_each() {
+    let dsl = r#"
+<script>
+    state items: Vec<Item> = vec![]
+</script>
+<template>
+    {#each items as item}
+        {#if item.active}
+            <span>Active: {item.name}</span>
+        {:else}
+            <span>Inactive: {item.name}</span>
+        {/if}
+    {/each}
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set(
+        "items",
+        json!([
+            {"name": "Widget", "active": true},
+            {"name": "Gadget", "active": false}
+        ]),
+    );
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Active: ") || html.contains("Widget"));
+    assert!(html.contains("Inactive: ") || html.contains("Gadget"));
+}
+
+// ---------------------------------------------------------------------------
+// E2E: customer page with if+each (from existing test, now verifies rendering)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn phase1_e2e_customer_page_renders_if_each() {
+    let dsl = r#"
+<script lang="rust">
+    state loading: bool = false
+    state customers: Vec<Customer> = []
+</script>
+<template>
+    {#if loading}
+        <span>Loading...</span>
+    {:else}
+        {#each customers as customer}
+            <div class="row">{customer.name}</div>
+        {/each}
+    {/if}
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set("loading", json!(false));
+    state.set(
+        "customers",
+        json!([
+            {"name": "Alice Corp"},
+            {"name": "Bob LLC"},
+            {"name": "Charlie Inc"}
+        ]),
+    );
+    let html = compile_and_render(dsl, &state);
+    assert!(!html.contains("Loading..."), "should not show loading");
+    assert!(html.contains("Alice Corp"));
+    assert!(html.contains("Bob LLC"));
+    assert!(html.contains("Charlie Inc"));
+
+    // Now test loading=true
+    state.set("loading", json!(true));
+    let html = compile_and_render(dsl, &state);
+    assert!(html.contains("Loading..."), "should show loading");
+    assert!(!html.contains("Alice Corp"), "should not show customers while loading");
+}
+
+#[test]
+fn phase1_five_items_loop() {
+    let dsl = r#"
+<script>
+    state nums: Vec<i32> = vec![]
+</script>
+<template>
+    {#each nums as n}
+        <span>{n}</span>
+    {/each}
+</template>
+"#;
+    let mut state = StateStore::new();
+    state.set("nums", json!([10, 20, 30, 40, 50]));
+    let html = compile_and_render(dsl, &state);
+    for v in &["10", "20", "30", "40", "50"] {
+        assert!(html.contains(v), "should contain {}", v);
+    }
 }

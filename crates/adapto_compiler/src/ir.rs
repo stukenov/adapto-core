@@ -37,6 +37,29 @@ pub struct DynamicSegment {
     pub deps: Vec<String>,
     /// Where this segment appears in the template
     pub segment_type: SegmentType,
+    /// For Conditional: the "then" branch body
+    pub then_body: Option<SegmentBody>,
+    /// For Conditional: else-if branches (condition, body)
+    pub else_if_bodies: Vec<(String, SegmentBody)>,
+    /// For Conditional: the "else" branch body
+    pub else_body: Option<SegmentBody>,
+    /// For Loop: the loop body with item variable binding
+    pub loop_body: Option<LoopBody>,
+    /// For Permission: the gated content
+    pub permission_body: Option<SegmentBody>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SegmentBody {
+    pub static_segments: Vec<String>,
+    pub dynamic_segments: Vec<DynamicSegment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoopBody {
+    pub item_var: String,
+    pub index_var: Option<String>,
+    pub body: SegmentBody,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +70,22 @@ pub enum SegmentType {
     Conditional,
     Loop,
     Permission,
+}
+
+impl DynamicSegment {
+    pub fn new(id: String, expr: String, deps: Vec<String>, segment_type: SegmentType) -> Self {
+        Self {
+            id,
+            expr,
+            deps,
+            segment_type,
+            then_body: None,
+            else_if_bodies: Vec::new(),
+            else_body: None,
+            loop_body: None,
+            permission_body: None,
+        }
+    }
 }
 
 /// A compiled event binding.

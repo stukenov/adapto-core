@@ -414,12 +414,12 @@ fn test_codegen_render_function() {
             "<button data-ar-click=\"increment\">".to_string(),
             "</button>".to_string(),
         ],
-        dynamic_segments: vec![DynamicSegment {
-            id: "dyn_0".to_string(),
-            expr: "state.count".to_string(),
-            deps: vec!["count".to_string()],
-            segment_type: SegmentType::Text,
-        }],
+        dynamic_segments: vec![DynamicSegment::new(
+            "dyn_0".to_string(),
+            "state.count".to_string(),
+            vec!["count".to_string()],
+            SegmentType::Text,
+        )],
         events: vec![],
         actions: vec![],
         state_fields: vec![StateFieldIR {
@@ -789,15 +789,27 @@ fn test_compile_if_else() {
         ir.dynamic_segments
     );
 
-    // Should also have a text dynamic segment for {name}
-    let texts: Vec<_> = ir
+    // {name} text segment now lives inside the conditional's then_body
+    let cond = &conditionals[0];
+    assert!(
+        cond.then_body.is_some(),
+        "Conditional should have a then_body"
+    );
+    let then_body = cond.then_body.as_ref().unwrap();
+    let nested_texts: Vec<_> = then_body
         .dynamic_segments
         .iter()
         .filter(|s| matches!(s.segment_type, SegmentType::Text))
         .collect();
     assert!(
-        !texts.is_empty(),
-        "Should have text dynamic segments for expression inside if"
+        !nested_texts.is_empty(),
+        "Should have text dynamic segments inside then_body for {{name}}"
+    );
+
+    // Conditional should also have an else_body
+    assert!(
+        cond.else_body.is_some(),
+        "Conditional should have an else_body"
     );
 }
 
@@ -836,6 +848,12 @@ fn test_compile_each_loop() {
 
     // The loop's iterable should depend on "items"
     assert!(loops[0].deps.contains(&"items".to_string()));
+
+    // Loop should have a loop_body with item_var and nested segments
+    assert!(loops[0].loop_body.is_some(), "Loop should have loop_body");
+    let loop_body = loops[0].loop_body.as_ref().unwrap();
+    assert_eq!(loop_body.item_var, "item");
+    assert_eq!(loop_body.index_var, Some("index".to_string()));
 }
 
 // ---------------------------------------------------------------------------
@@ -1581,12 +1599,12 @@ fn test_codegen_full_structure() {
             "<div class=\"profile\">".to_string(),
             "</div>".to_string(),
         ],
-        dynamic_segments: vec![DynamicSegment {
-            id: "dyn_0".to_string(),
-            expr: "state.username".to_string(),
-            deps: vec!["username".to_string()],
-            segment_type: SegmentType::Text,
-        }],
+        dynamic_segments: vec![DynamicSegment::new(
+            "dyn_0".to_string(),
+            "state.username".to_string(),
+            vec!["username".to_string()],
+            SegmentType::Text,
+        )],
         events: vec![EventIR {
             id: "evt_0".to_string(),
             event_type: "click".to_string(),
@@ -1851,30 +1869,30 @@ fn test_codegen_renders_all_segment_types() {
             "</ul>".to_string(),
         ],
         dynamic_segments: vec![
-            DynamicSegment {
-                id: "dyn_0".to_string(),
-                expr: "show".to_string(),
-                deps: vec!["show".to_string()],
-                segment_type: SegmentType::Conditional,
-            },
-            DynamicSegment {
-                id: "dyn_1".to_string(),
-                expr: "items".to_string(),
-                deps: vec!["items".to_string()],
-                segment_type: SegmentType::Loop,
-            },
-            DynamicSegment {
-                id: "dyn_2".to_string(),
-                expr: "admin.delete".to_string(),
-                deps: vec!["permission:admin.delete".to_string()],
-                segment_type: SegmentType::Permission,
-            },
-            DynamicSegment {
-                id: "dyn_3".to_string(),
-                expr: "state.title".to_string(),
-                deps: vec!["title".to_string()],
-                segment_type: SegmentType::Text,
-            },
+            DynamicSegment::new(
+                "dyn_0".to_string(),
+                "show".to_string(),
+                vec!["show".to_string()],
+                SegmentType::Conditional,
+            ),
+            DynamicSegment::new(
+                "dyn_1".to_string(),
+                "items".to_string(),
+                vec!["items".to_string()],
+                SegmentType::Loop,
+            ),
+            DynamicSegment::new(
+                "dyn_2".to_string(),
+                "admin.delete".to_string(),
+                vec!["permission:admin.delete".to_string()],
+                SegmentType::Permission,
+            ),
+            DynamicSegment::new(
+                "dyn_3".to_string(),
+                "state.title".to_string(),
+                vec!["title".to_string()],
+                SegmentType::Text,
+            ),
         ],
         events: vec![],
         actions: vec![],

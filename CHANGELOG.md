@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.2.3] - 2026-05-27
+
+### Added
+
+#### Phase 1: SSR Conditional & Loop Rendering
+- **SegmentBody / LoopBody IR** — `DynamicSegment` now holds nested `then_body`, `else_body`, `else_if_bodies`, `loop_body`, `permission_body` instead of flattening children into parent arrays. (`ir.rs`)
+- **Compiler nested compilation** — `compile_body()` method compiles if/each/can branch children into isolated `SegmentBody` structs on the `DynamicSegment`. (`compiler.rs`)
+- **SSR conditional rendering** — `render_conditional()` evaluates condition via `eval_expr()`, renders matching branch body. (`renderer.rs`)
+- **SSR loop rendering** — `render_loop()` evaluates iterable via `eval_expr_raw()`, iterates items with scoped `StateStore` clone per iteration. (`renderer.rs`)
+- **Recursive body rendering** — `render_body()` recursively renders nested `SegmentBody` segments. (`renderer.rs`)
+- **13 new Phase 1 SSR tests** — if true/false, if-else branches, truthy values, dynamic content inside if, each with 0/1/3/5 items, each with index, each with objects, nested if-inside-each, e2e customer page if+each. (`ssr_tests.rs`)
+
+### Fixed
+- **eval_expr dot-path with state. prefix** — `eval_expr()` and `eval_expr_raw()` now try dot-path resolution on `state.`-stripped expression before original, fixing `state.user.name` lookups in loop scopes. (`renderer.rs`)
+
 ## [0.2.2] - 2026-05-27
 
 ### Added
