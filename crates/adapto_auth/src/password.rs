@@ -13,15 +13,7 @@ const HASH_LEN: usize = 32;
 
 fn random_salt() -> [u8; SALT_LEN] {
     let mut salt = [0u8; SALT_LEN];
-    let seed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let mut state = seed;
-    for byte in salt.iter_mut() {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        *byte = (state >> 33) as u8;
-    }
+    getrandom::getrandom(&mut salt).expect("OS RNG failure");
     salt
 }
 

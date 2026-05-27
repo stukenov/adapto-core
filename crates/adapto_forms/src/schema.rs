@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::rules::FormRule;
+use crate::sanitize::SanitizerPipeline;
 use crate::validation::{validate_field, ValidationResult};
 
 // ---------------------------------------------------------------------------
@@ -10,6 +12,29 @@ use crate::validation::{validate_field, ValidationResult};
 pub struct FormSchema {
     pub name: String,
     pub fields: Vec<FieldSchema>,
+    #[serde(skip)]
+    rules: Vec<FormRuleHolder>,
+}
+
+#[derive(Clone)]
+struct FormRuleHolder(std::sync::Arc<FormRule>);
+
+impl std::fmt::Debug for FormRuleHolder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl serde::Serialize for FormRuleHolder {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format!("{:?}", self.0))
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FormRuleHolder {
+    fn deserialize<D: serde::Deserializer<'de>>(_deserializer: D) -> Result<Self, D::Error> {
+        Err(serde::de::Error::custom("FormRuleHolder cannot be deserialized"))
+    }
 }
 
 impl FormSchema {
@@ -17,11 +42,17 @@ impl FormSchema {
         Self {
             name: name.to_string(),
             fields: Vec::new(),
+            rules: Vec::new(),
         }
     }
 
     pub fn field(mut self, field: FieldSchema) -> Self {
         self.fields.push(field);
+        self
+    }
+
+    pub fn rule(mut self, rule: FormRule) -> Self {
+        self.rules.push(FormRuleHolder(std::sync::Arc::new(rule)));
         self
     }
 
@@ -37,7 +68,27 @@ impl FormSchema {
                 result.add_error(&error.field, &error.code, &error.message);
             }
         }
+        for rule in &self.rules {
+            rule.0.validate(data, &mut result);
+        }
         result
+    }
+
+    pub fn validate_and_sanitize(
+        &self,
+        data: &mut serde_json::Map<String, serde_json::Value>,
+        pipeline: &SanitizerPipeline,
+    ) -> ValidationResult {
+        pipeline.apply(data);
+        self.validate(data)
+    }
+
+    pub fn field_names(&self) -> Vec<&str> {
+        self.fields.iter().map(|f| f.name.as_str()).collect()
+    }
+
+    pub fn get_field(&self, name: &str) -> Option<&FieldSchema> {
+        self.fields.iter().find(|f| f.name == name)
     }
 }
 

@@ -1,4 +1,6 @@
 use adapto_forms::error::FormError;
+use adapto_forms::rules::FormRule;
+use adapto_forms::sanitize::{Sanitizer, SanitizerPipeline};
 use adapto_forms::schema::{Constraint, FieldSchema, FieldType, FormSchema};
 use adapto_forms::validation::{validate_email, validate_field, ValidationResult};
 use serde_json::{json, Map, Value};
@@ -568,4 +570,221 @@ fn validate_optional_type_with_required_flag() {
     let errors = validate_field(&field, Some(&json!(42)));
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].code, "invalid_type");
+}
+
+// ===========================================================================
+// Sanitizers
+// ===========================================================================
+
+#[test]
+fn sanitizer_trim() {
+    let result = Sanitizer::Trim.apply(&json!("  hello  "));
+    assert_eq!(result, json!("hello"));
+}
+
+#[test]
+fn sanitizer_lowercase() {
+    let result = Sanitizer::Lowercase.apply(&json!("Hello WORLD"));
+    assert_eq!(result, json!("hello world"));
+}
+
+#[test]
+fn sanitizer_uppercase() {
+    let result = Sanitizer::Uppercase.apply(&json!("hello"));
+    assert_eq!(result, json!("HELLO"));
+}
+
+#[test]
+fn sanitizer_strip_html() {
+    let result = Sanitizer::StripHtml.apply(&json!("<b>bold</b> text"));
+    assert_eq!(result, json!("bold text"));
+}
+
+#[test]
+fn sanitizer_truncate() {
+    let result = Sanitizer::TruncateTo(5).apply(&json!("hello world"));
+    assert_eq!(result, json!("hello"));
+    let short = Sanitizer::TruncateTo(100).apply(&json!("hi"));
+    assert_eq!(short, json!("hi"));
+}
+
+#[test]
+fn sanitizer_non_string_passthrough() {
+    let result = Sanitizer::Trim.apply(&json!(42));
+    assert_eq!(result, json!(42));
+}
+
+#[test]
+fn sanitizer_pipeline() {
+    let pipeline = SanitizerPipeline::new()
+        .field("name", vec![Sanitizer::Trim, Sanitizer::Lowercase])
+        .field("bio", vec![Sanitizer::StripHtml]);
+
+    let mut data = map_from(vec![
+        ("name", json!("  Alice  ")),
+        ("bio", json!("<p>Hello</p>")),
+        ("age", json!(30)),
+    ]);
+
+    pipeline.apply(&mut data);
+    assert_eq!(data["name"], json!("alice"));
+    assert_eq!(data["bio"], json!("Hello"));
+    assert_eq!(data["age"], json!(30));
+}
+
+#[test]
+fn sanitizer_pipeline_missing_field_ignored() {
+    let pipeline = SanitizerPipeline::new()
+        .field("nonexistent", vec![Sanitizer::Trim]);
+    let mut data = map_from(vec![("name", json!("test"))]);
+    pipeline.apply(&mut data);
+    assert_eq!(data["name"], json!("test"));
+}
+
+// ===========================================================================
+// Cross-Field Rules
+// ===========================================================================
+
+#[test]
+fn rule_fields_match_pass() {
+    let schema = FormSchema::new("register")
+        .field(FieldSchema::new("password", FieldType::String).required())
+        .field(FieldSchema::new("password_confirm", FieldType::String).required())
+        .rule(FormRule::fields_match("password", "password_confirm"));
+
+    let data = map_from(vec![
+        ("password", json!("secret123")),
+        ("password_confirm", json!("secret123")),
+    ]);
+    assert!(schema.validate(&data).is_valid());
+}
+
+#[test]
+fn rule_fields_match_fail() {
+    let schema = FormSchema::new("register")
+        .field(FieldSchema::new("password", FieldType::String).required())
+        .field(FieldSchema::new("password_confirm", FieldType::String).required())
+        .rule(FormRule::fields_match("password", "password_confirm"));
+
+    let data = map_from(vec![
+        ("password", json!("secret123")),
+        ("password_confirm", json!("different")),
+    ]);
+    let result = schema.validate(&data);
+    assert!(!result.is_valid());
+    assert!(!result.field_errors("password_confirm").is_empty());
+    assert_eq!(result.field_errors("password_confirm")[0].code, "fields_match");
+}
+
+#[test]
+fn rule_required_if() {
+    let schema = FormSchema::new("profile")
+        .field(FieldSchema::new("has_company", FieldType::Boolean))
+        .field(FieldSchema::new("company_name", FieldType::String))
+        .rule(FormRule::required_if("company_name", "has_company", json!(true)));
+
+    let data = map_from(vec![("has_company", json!(true))]);
+    let result = schema.validate(&data);
+    assert!(!result.is_valid());
+
+    let data = map_from(vec![
+        ("has_company", json!(true)),
+        ("company_name", json!("Acme")),
+    ]);
+    assert!(schema.validate(&data).is_valid());
+
+    let data = map_from(vec![("has_company", json!(false))]);
+    assert!(schema.validate(&data).is_valid());
+}
+
+#[test]
+fn rule_required_unless() {
+    let schema = FormSchema::new("contact")
+        .field(FieldSchema::new("method", FieldType::String))
+        .field(FieldSchema::new("phone", FieldType::String))
+        .rule(FormRule::required_unless("phone", "method", json!("email")));
+
+    let data = map_from(vec![("method", json!("phone"))]);
+    let result = schema.validate(&data);
+    assert!(!result.is_valid());
+
+    let data = map_from(vec![("method", json!("email"))]);
+    assert!(schema.validate(&data).is_valid());
+}
+
+#[test]
+fn rule_mutually_exclusive() {
+    let schema = FormSchema::new("auth")
+        .field(FieldSchema::new("token", FieldType::String))
+        .field(FieldSchema::new("api_key", FieldType::String))
+        .rule(FormRule::mutually_exclusive(&["token", "api_key"]));
+
+    let data = map_from(vec![("token", json!("abc"))]);
+    assert!(schema.validate(&data).is_valid());
+
+    let data = map_from(vec![
+        ("token", json!("abc")),
+        ("api_key", json!("xyz")),
+    ]);
+    assert!(!schema.validate(&data).is_valid());
+}
+
+#[test]
+fn rule_at_least_one_of() {
+    let schema = FormSchema::new("contact")
+        .field(FieldSchema::new("email", FieldType::String))
+        .field(FieldSchema::new("phone", FieldType::String))
+        .rule(FormRule::at_least_one_of(&["email", "phone"]));
+
+    let data = map_from(vec![]);
+    assert!(!schema.validate(&data).is_valid());
+
+    let data = map_from(vec![("email", json!("x@y.com"))]);
+    assert!(schema.validate(&data).is_valid());
+}
+
+// ===========================================================================
+// validate_and_sanitize
+// ===========================================================================
+
+#[test]
+fn validate_and_sanitize_integration() {
+    let schema = FormSchema::new("user")
+        .field(FieldSchema::new("email", FieldType::Email).required())
+        .field(FieldSchema::new("name", FieldType::String).required().min_length(1));
+
+    let pipeline = SanitizerPipeline::new()
+        .field("email", vec![Sanitizer::Trim, Sanitizer::Lowercase])
+        .field("name", vec![Sanitizer::Trim]);
+
+    let mut data = map_from(vec![
+        ("email", json!("  User@Example.COM  ")),
+        ("name", json!("  Alice  ")),
+    ]);
+
+    let result = schema.validate_and_sanitize(&mut data, &pipeline);
+    assert!(result.is_valid());
+    assert_eq!(data["email"], json!("user@example.com"));
+    assert_eq!(data["name"], json!("Alice"));
+}
+
+// ===========================================================================
+// Schema helpers
+// ===========================================================================
+
+#[test]
+fn schema_field_names() {
+    let schema = FormSchema::new("test")
+        .field(FieldSchema::new("a", FieldType::String))
+        .field(FieldSchema::new("b", FieldType::Integer));
+    assert_eq!(schema.field_names(), vec!["a", "b"]);
+}
+
+#[test]
+fn schema_get_field() {
+    let schema = FormSchema::new("test")
+        .field(FieldSchema::new("name", FieldType::String).required());
+    assert!(schema.get_field("name").is_some());
+    assert!(schema.get_field("missing").is_none());
+    assert!(schema.get_field("name").unwrap().required);
 }
