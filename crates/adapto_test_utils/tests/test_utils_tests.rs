@@ -653,3 +653,324 @@ fn assertion_state_clean() {
     store.clear_dirty();
     assert_state_clean(&store, "a");
 }
+
+// ---------------------------------------------------------------------------
+// HTTP builders
+// ---------------------------------------------------------------------------
+
+use adapto_test_utils::http::*;
+
+#[test]
+fn test_request_get() {
+    let req = TestRequest::get("/api/users");
+    assert_eq!(req.method, "GET");
+    assert_eq!(req.path, "/api/users");
+    assert!(req.body.is_none());
+    assert!(req.headers.is_empty());
+}
+
+#[test]
+fn test_request_post_with_json() {
+    let req = TestRequest::post("/api/users")
+        .json_body(&json!({"name": "Alice", "age": 30}));
+    assert_eq!(req.method, "POST");
+    assert_eq!(
+        req.headers.get("content-type").unwrap(),
+        "application/json",
+    );
+    let body = req.body_json().unwrap();
+    assert_eq!(body["name"], "Alice");
+    assert_eq!(body["age"], 30);
+}
+
+#[test]
+fn test_request_put() {
+    let req = TestRequest::put("/api/users/1")
+        .text_body("hello");
+    assert_eq!(req.method, "PUT");
+    assert_eq!(req.body_str(), Some("hello"));
+}
+
+#[test]
+fn test_request_delete() {
+    let req = TestRequest::delete("/api/users/1");
+    assert_eq!(req.method, "DELETE");
+}
+
+#[test]
+fn test_request_patch() {
+    let req = TestRequest::patch("/api/users/1")
+        .json_body(&json!({"status": "active"}));
+    assert_eq!(req.method, "PATCH");
+}
+
+#[test]
+fn test_request_headers() {
+    let req = TestRequest::get("/api")
+        .header("x-custom", "val")
+        .content_type("text/plain")
+        .bearer("tok123")
+        .cookie("session=abc");
+    assert_eq!(req.headers.get("x-custom").unwrap(), "val");
+    assert_eq!(req.headers.get("content-type").unwrap(), "text/plain");
+    assert_eq!(req.headers.get("authorization").unwrap(), "Bearer tok123");
+    assert_eq!(req.headers.get("cookie").unwrap(), "session=abc");
+}
+
+#[test]
+fn test_request_query_params() {
+    let req = TestRequest::get("/search")
+        .query("q", "rust")
+        .query("page", "2");
+    assert_eq!(req.full_path(), "/search?q=rust&page=2");
+}
+
+#[test]
+fn test_request_no_query_params() {
+    let req = TestRequest::get("/home");
+    assert_eq!(req.full_path(), "/home");
+}
+
+#[test]
+fn test_response_ok() {
+    let resp = TestResponse::ok("hello");
+    assert_eq!(resp.status, 200);
+    assert_eq!(resp.text(), "hello");
+    assert!(resp.is_success());
+}
+
+#[test]
+fn test_response_json() {
+    let resp = TestResponse::json(201, &json!({"id": "abc"}));
+    assert_eq!(resp.status, 201);
+    assert!(resp.is_success());
+    let body = resp.json_body().unwrap();
+    assert_eq!(body["id"], "abc");
+    assert_eq!(resp.header("content-type").unwrap(), "application/json");
+}
+
+#[test]
+fn test_response_not_found() {
+    let resp = TestResponse::not_found();
+    assert_eq!(resp.status, 404);
+    assert!(resp.is_client_error());
+    assert!(!resp.is_success());
+}
+
+#[test]
+fn test_response_redirect() {
+    let resp = TestResponse::redirect("/login");
+    assert_eq!(resp.status, 302);
+    assert!(resp.is_redirect());
+    assert_eq!(resp.header("location").unwrap(), "/login");
+}
+
+#[test]
+fn test_assert_status() {
+    let resp = TestResponse::ok("ok");
+    assert_status(&resp, 200);
+}
+
+#[test]
+fn test_assert_body_contains() {
+    let resp = TestResponse::ok("hello world");
+    assert_body_contains(&resp, "hello");
+    assert_body_contains(&resp, "world");
+}
+
+#[test]
+fn test_assert_json_field() {
+    let resp = TestResponse::json(200, &json!({"user": {"name": "Alice"}}));
+    assert_json_field(&resp, "user.name", &json!("Alice"));
+}
+
+#[test]
+fn test_assert_header() {
+    let resp = TestResponse::json(200, &json!({}));
+    assert_header(&resp, "content-type", "application/json");
+}
+
+#[test]
+fn test_response_server_error() {
+    let resp = TestResponse { status: 500, headers: Default::default(), body: b"error".to_vec() };
+    assert!(resp.is_server_error());
+    assert!(!resp.is_client_error());
+    assert!(!resp.is_success());
+}
+
+// ---------------------------------------------------------------------------
+// Store helpers
+// ---------------------------------------------------------------------------
+
+use adapto_test_utils::store::*;
+
+#[test]
+fn temp_store_creates_in_memory() {
+    let store = temp_store();
+    assert!(store.collections().is_empty());
+}
+
+#[test]
+fn seeder_insert_and_count() {
+    let store = temp_store();
+    let seeder = StoreSeeder::new(&store, "items");
+    seeder.insert(json!({"name": "a"}));
+    seeder.insert(json!({"name": "b"}));
+    assert_eq!(seeder.count(), 2);
+}
+
+#[test]
+fn seeder_insert_many() {
+    let store = temp_store();
+    let seeder = StoreSeeder::new(&store, "items");
+    let ids = seeder.insert_many(vec![json!({"x": 1}), json!({"x": 2}), json!({"x": 3})]);
+    assert_eq!(ids.len(), 3);
+    assert_eq!(seeder.count(), 3);
+}
+
+#[test]
+fn seeder_seed_n() {
+    let store = temp_store();
+    let seeder = StoreSeeder::new(&store, "users");
+    let ids = seeder.seed_n(5, |i| json!({"name": format!("user_{}", i), "idx": i}));
+    assert_eq!(ids.len(), 5);
+    assert_eq!(seeder.count(), 5);
+}
+
+#[test]
+fn seeder_with_index() {
+    let store = temp_store();
+    let seeder = StoreSeeder::new(&store, "users").with_index("email", true);
+    seeder.insert(json!({"email": "a@b.com"}));
+    let col = store.collection("users");
+    let indexes = col.indexes();
+    assert!(indexes.iter().any(|i| i.fields.contains(&"email".to_string())));
+}
+
+#[test]
+fn assert_doc_exists_passes() {
+    let store = temp_store();
+    let id = store.collection("test").insert(json!({"k": "v"})).unwrap();
+    assert_doc_exists(&store, "test", &id);
+}
+
+#[test]
+fn assert_doc_not_exists_passes() {
+    let store = temp_store();
+    assert_doc_not_exists(&store, "test", "nonexistent");
+}
+
+#[test]
+fn assert_doc_field_passes() {
+    let store = temp_store();
+    let id = store.collection("test").insert(json!({"name": "Alice", "age": 30})).unwrap();
+    assert_doc_field(&store, "test", &id, "name", &json!("Alice"));
+    assert_doc_field(&store, "test", &id, "age", &json!(30));
+}
+
+#[test]
+fn assert_collection_count_passes() {
+    let store = temp_store();
+    store.collection("items").insert(json!({"a": 1})).unwrap();
+    store.collection("items").insert(json!({"a": 2})).unwrap();
+    assert_collection_count(&store, "items", 2);
+}
+
+#[test]
+fn assert_query_count_passes() {
+    let store = temp_store();
+    let col = store.collection("items");
+    col.insert(json!({"status": "active"})).unwrap();
+    col.insert(json!({"status": "active"})).unwrap();
+    col.insert(json!({"status": "inactive"})).unwrap();
+    assert_query_count(&store, "items", adapto_store::Query::eq("status", "active"), 2);
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot / JSON assertions
+// ---------------------------------------------------------------------------
+
+use adapto_test_utils::snapshot::*;
+
+#[test]
+fn json_eq_passes() {
+    let a = json!({"name": "Alice", "age": 30});
+    let b = json!({"name": "Alice", "age": 30});
+    assert_json_eq(&a, &b);
+}
+
+#[test]
+fn json_includes_subset() {
+    let full = json!({"name": "Alice", "age": 30, "email": "a@b.com"});
+    let subset = json!({"name": "Alice", "age": 30});
+    assert_json_includes(&full, &subset);
+}
+
+#[test]
+fn json_includes_nested() {
+    let full = json!({"user": {"name": "Alice", "role": "admin"}, "status": "ok"});
+    let subset = json!({"user": {"name": "Alice"}});
+    assert_json_includes(&full, &subset);
+}
+
+#[test]
+fn json_includes_array() {
+    let full = json!([1, 2, 3, 4, 5]);
+    let subset = json!([1, 2, 3]);
+    assert_json_includes(&full, &subset);
+}
+
+#[test]
+fn json_shape_passes() {
+    let val = json!({"id": "123", "name": "Alice", "email": "a@b.com"});
+    assert_json_shape(&val, &["id", "name", "email"]);
+}
+
+#[test]
+fn json_array_len_passes() {
+    let val = json!([1, 2, 3]);
+    assert_json_array_len(&val, 3);
+}
+
+#[test]
+fn json_diff_identical() {
+    let a = json!({"x": 1, "y": "hello"});
+    let b = json!({"x": 1, "y": "hello"});
+    assert!(json_diff(&a, &b).is_empty());
+}
+
+#[test]
+fn json_diff_detects_changes() {
+    let a = json!({"x": 1, "y": "hello"});
+    let b = json!({"x": 2, "y": "hello"});
+    let diffs = json_diff(&a, &b);
+    assert_eq!(diffs.len(), 1);
+    assert!(diffs[0].contains("x"));
+}
+
+#[test]
+fn json_diff_detects_missing_keys() {
+    let a = json!({"x": 1, "y": 2});
+    let b = json!({"x": 1});
+    let diffs = json_diff(&a, &b);
+    assert_eq!(diffs.len(), 1);
+    assert!(diffs[0].contains("y"));
+}
+
+#[test]
+fn json_diff_nested() {
+    let a = json!({"user": {"name": "Alice", "age": 30}});
+    let b = json!({"user": {"name": "Bob", "age": 30}});
+    let diffs = json_diff(&a, &b);
+    assert_eq!(diffs.len(), 1);
+    assert!(diffs[0].contains("user.name"));
+}
+
+#[test]
+fn json_diff_array() {
+    let a = json!([1, 2, 3]);
+    let b = json!([1, 2, 4]);
+    let diffs = json_diff(&a, &b);
+    assert_eq!(diffs.len(), 1);
+    assert!(diffs[0].contains("[2]"));
+}
