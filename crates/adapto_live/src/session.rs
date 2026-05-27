@@ -61,16 +61,10 @@ impl LiveSession {
     }
 
     /// Process an incoming client event, dispatching to the registered handler
-    /// and returning the resulting patch message.
+    /// or falling back to the interpreter for the action body from IR.
     pub fn handle_event(&mut self, event: &ClientEvent) -> Result<PatchMessage, LiveError> {
         self.touch();
 
-        let handler = self
-            .action_handlers
-            .get(&event.handler)
-            .ok_or_else(|| LiveError::UnknownHandler(event.handler.clone()))?;
-
-        let ctx = self.ctx();
         let args = serde_json::Value::Object(
             event
                 .payload
@@ -79,7 +73,22 @@ impl LiveSession {
                 .collect(),
         );
 
-        handler(&mut self.state, &ctx, args)?;
+        if let Some(handler) = self.action_handlers.get(&event.handler) {
+            let ctx = self.ctx();
+            handler(&mut self.state, &ctx, args)?;
+        } else if let Some(action_ir) = self.component_ir.actions.iter().find(|a| a.name == event.handler) {
+            if let Some(ref perm) = action_ir.permission {
+                let ctx = self.ctx();
+                ctx.require(perm).map_err(|e| LiveError::PermissionDenied(e.to_string()))?;
+            }
+            adapto_runtime::interpreter::Interpreter::execute(
+                &action_ir.body,
+                &mut self.state,
+                &args,
+            ).map_err(|e| LiveError::Internal(e.to_string()))?;
+        } else {
+            return Err(LiveError::UnknownHandler(event.handler.clone()));
+        }
 
         Ok(self.generate_patches())
     }

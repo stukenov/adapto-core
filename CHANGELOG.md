@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+#### Phase 2: Full Action Interpreter
+- **Interpreter module** — lexer, parser, evaluator for action body DSL. Supports assignments (`=`, `+=`, `-=`, `*=`, `/=`), binary operators (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`), unary (`!`, `-`), `let` bindings, `if/else`, `for..in` loops, dot-path access/assignment, index access, method calls, array/object literals, comments, string concatenation. (`interpreter.rs`)
+- **Built-in methods** — `len()`, `push()`, `contains()`, `is_empty()`, `to_lowercase()`, `to_uppercase()`, `trim()`, `starts_with()`, `ends_with()`, `split()`, `replace()`, `keys()`, `values()`, `abs()`. (`interpreter.rs`)
+- **LiveSession interpreter fallback** — `handle_event()` now falls back to interpreting `ActionIR.body` when no manual handler is registered, with permission checking. (`session.rs`)
+- **36 interpreter tests** — simple/compound assignment, dot-path mutation, arithmetic, comparison, string concat, if/else, for loop, let binding, string/array methods, args access, logical ops, multi-statement, array/object literals, index access, dirty tracking, counter/toggle/form scenarios, edge cases (div/0, empty body, comments, nested if, coercion, modulo, parentheses, negative numbers). (`interpreter.rs`)
+
 #### Phase 1: SSR Conditional & Loop Rendering
 - **SegmentBody / LoopBody IR** — `DynamicSegment` now holds nested `then_body`, `else_body`, `else_if_bodies`, `loop_body`, `permission_body` instead of flattening children into parent arrays. (`ir.rs`)
 - **Compiler nested compilation** — `compile_body()` method compiles if/each/can branch children into isolated `SegmentBody` structs on the `DynamicSegment`. (`compiler.rs`)

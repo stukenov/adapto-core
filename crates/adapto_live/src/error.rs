@@ -20,4 +20,6 @@ pub enum LiveError {
     StateError(String),
     #[error("Handler error: {0}")]
     HandlerError(String),
+    #[error("Internal error: {0}")]
+    Internal(String),
 }
