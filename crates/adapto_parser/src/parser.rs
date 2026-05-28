@@ -1138,6 +1138,9 @@ impl<'a> TemplateParser<'a> {
             if after_brace.starts_with("#can ") || after_brace.starts_with("#can\t") {
                 return self.parse_can_block().map(Some);
             }
+            if after_brace.starts_with("#fill ") || after_brace.starts_with("#fill\t") {
+                return self.parse_fill_block().map(Some);
+            }
             if after_brace.starts_with("@html ") || after_brace.starts_with("@html\t") {
                 return self.parse_unsafe_html().map(Some);
             }
@@ -1147,6 +1150,7 @@ impl<'a> TemplateParser<'a> {
                 || after_brace.starts_with("/each")
                 || after_brace.starts_with("/match")
                 || after_brace.starts_with("/can")
+                || after_brace.starts_with("/fill")
             {
                 return Ok(None);
             }
@@ -1341,6 +1345,36 @@ impl<'a> TemplateParser<'a> {
 
         Ok(TemplateNode::Can(CanNode {
             permission,
+            children,
+        }))
+    }
+
+    fn parse_fill_block(&mut self) -> ParseResult<TemplateNode> {
+        // {#fill slot_name}
+        self.advance(1); // skip `{`
+        let tag_content = self.consume_until_balanced_brace()?;
+        let slot_name = tag_content
+            .trim_start_matches("#fill")
+            .trim()
+            .to_string();
+
+        if slot_name.is_empty() {
+            return Err(ParseError::Syntax {
+                line: 0,
+                col: 0,
+                message: "{#fill} requires a slot name".into(),
+            });
+        }
+
+        let children = self.parse_children(&["{/fill}"])?;
+
+        self.skip_whitespace();
+        if self.remaining().starts_with("{/fill}") {
+            self.advance(7);
+        }
+
+        Ok(TemplateNode::Fill(FillNode {
+            slot_name,
             children,
         }))
     }
@@ -1785,12 +1819,12 @@ impl<'a> TemplateParser<'a> {
             self.advance(c.len_utf8());
         }
 
-        // Normalize whitespace in text nodes
-        let trimmed = text.trim();
-        if trimmed.is_empty() {
+        // Collapse pure-whitespace text nodes (indentation), but preserve
+        // content text with its surrounding spaces (e.g. " на " between expressions)
+        if text.trim().is_empty() {
             Ok(String::new())
         } else {
-            Ok(trimmed.to_string())
+            Ok(text)
         }
     }
 
@@ -2060,6 +2094,7 @@ fn parse_layout_block(
 
     let mut auth = None;
     let mut tenant = None;
+    let mut parent_layout = None;
 
     for line in content.lines() {
         let line = line.trim();
@@ -2087,6 +2122,9 @@ fn parse_layout_block(
                         }
                     })?);
                 }
+                "layout" => {
+                    parent_layout = Some(v);
+                }
                 // Silently ignore other fields in layout — they may be future extensions
                 _ => {}
             }
@@ -2095,7 +2133,7 @@ fn parse_layout_block(
 
     Ok(LayoutBlock {
         name,
-        parent_layout: None,
+        parent_layout,
         auth,
         tenant,
     })

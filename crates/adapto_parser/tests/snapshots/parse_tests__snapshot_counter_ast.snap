@@ -46,7 +46,7 @@ template:
             modifiers: []
         bindings: []
         children:
-          - Text: "Count:"
+          - Text: "Count: "
           - Expression:
               expr: count
               id: ~

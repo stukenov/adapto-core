@@ -2105,3 +2105,87 @@ fn parse_template_named_slot() {
     assert_eq!(slots[0].name.as_deref(), Some("header"));
     assert!(slots[1].name.is_none());
 }
+
+// ---------------------------------------------------------------------------
+// Task 2: {#fill} block parsing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_fill_block() {
+    let input = r#"<template>
+        {#fill sidebar}
+            <nav>Side nav</nav>
+        {/fill}
+        <h1>Main content</h1>
+    </template>"#;
+    let file = parse(input).unwrap();
+    let template = file.template.unwrap();
+    let has_fill = template.children.iter().any(|n| matches!(n, TemplateNode::Fill(_)));
+    assert!(has_fill, "Expected a Fill node in template children");
+
+    if let Some(TemplateNode::Fill(fill)) = template.children.iter().find(|n| matches!(n, TemplateNode::Fill(_))) {
+        assert_eq!(fill.slot_name, "sidebar");
+        assert!(!fill.children.is_empty());
+    }
+}
+
+#[test]
+fn parse_multiple_fills() {
+    let input = r#"<template>
+        {#fill head}<title>Page</title>{/fill}
+        <h1>Content</h1>
+        {#fill sidebar}<nav>Nav</nav>{/fill}
+    </template>"#;
+    let file = parse(input).unwrap();
+    let template = file.template.unwrap();
+    let fills: Vec<_> = template.children.iter().filter(|n| matches!(n, TemplateNode::Fill(_))).collect();
+    assert_eq!(fills.len(), 2);
+}
+
+#[test]
+fn parse_fill_with_nested_control_flow() {
+    let input = r#"<template>
+        {#fill panel}
+            {#if show}
+                <div>Visible</div>
+            {/if}
+        {/fill}
+    </template>"#;
+    let file = parse(input).unwrap();
+    let template = file.template.unwrap();
+    if let Some(TemplateNode::Fill(fill)) = template.children.iter().find(|n| matches!(n, TemplateNode::Fill(_))) {
+        assert_eq!(fill.slot_name, "panel");
+        let has_if = fill.children.iter().any(|n| matches!(n, TemplateNode::If(_)));
+        assert!(has_if, "Fill should contain an If node");
+    } else {
+        panic!("Expected Fill node");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Task 3: layout: parent field parsing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn parse_layout_block_with_parent() {
+    let input = r#"<layout name="dashboard">
+        layout: "base"
+        auth: required
+    </layout>"#;
+    let file = parse(input).unwrap();
+    let layout = file.layout.unwrap();
+    assert_eq!(layout.name, "dashboard");
+    assert_eq!(layout.parent_layout, Some("base".to_string()));
+    assert_eq!(layout.auth, Some(AuthLevel::Required));
+}
+
+#[test]
+fn parse_layout_block_without_parent() {
+    let input = r#"<layout name="base">
+        auth: public
+    </layout>"#;
+    let file = parse(input).unwrap();
+    let layout = file.layout.unwrap();
+    assert_eq!(layout.name, "base");
+    assert!(layout.parent_layout.is_none());
+}
