@@ -38,6 +38,9 @@ pub enum CompileError {
         message: String,
     },
 
+    #[error("E0601: Duplicate fill for slot `{slot_name}` in {file}")]
+    DuplicateFill { slot_name: String, file: String },
+
     #[error("Compilation failed with {count} errors")]
     Multiple {
         count: usize,

@@ -123,6 +123,20 @@ impl Compiler {
             Vec::new()
         };
 
+        // Extract fill blocks from template
+        let fills = if let Some(ref template) = file.template {
+            self.extract_fills(&template.children, source_path)?
+        } else {
+            Vec::new()
+        };
+
+        // Extract slot placeholders from template (for layout files)
+        let slot_placeholders = if let Some(ref template) = file.template {
+            self.extract_slots(&template.children, &component_id, source_path)?
+        } else {
+            Vec::new()
+        };
+
         let ir = ComponentIR {
             id: component_id.clone(),
             name: component_name.clone(),
@@ -137,6 +151,8 @@ impl Compiler {
             children,
             is_island: false,
             style,
+            slot_placeholders,
+            fills,
         };
 
         // Security checks
@@ -862,6 +878,106 @@ impl Compiler {
         self.event_counter += 1;
         id
     }
+
+    /// Extract `{#fill slot_name}...{/fill}` nodes from a template's top-level children.
+    ///
+    /// Returns an error if the same slot name is filled more than once.
+    fn extract_fills(
+        &mut self,
+        nodes: &[TemplateNode],
+        source_path: &str,
+    ) -> Result<Vec<FillSegmentIR>, CompileError> {
+        let mut fills = Vec::new();
+        let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut events = Vec::new();
+
+        for node in nodes {
+            if let TemplateNode::Fill(fill) = node {
+                if !seen_names.insert(fill.slot_name.clone()) {
+                    return Err(CompileError::DuplicateFill {
+                        slot_name: fill.slot_name.clone(),
+                        file: source_path.to_string(),
+                    });
+                }
+                let body = self.compile_body(
+                    &fill.children,
+                    &format!("fill_{}", fill.slot_name),
+                    source_path,
+                    &mut events,
+                )?;
+                fills.push(FillSegmentIR {
+                    slot_name: fill.slot_name.clone(),
+                    body,
+                });
+            }
+        }
+        Ok(fills)
+    }
+
+    /// Extract `<slot>` and `<slot name="...">` nodes from a component's template tree.
+    fn extract_slots(
+        &mut self,
+        nodes: &[TemplateNode],
+        component_id: &str,
+        source_path: &str,
+    ) -> Result<Vec<SlotPlaceholderIR>, CompileError> {
+        let mut slots = Vec::new();
+        self.collect_slots(nodes, component_id, source_path, &mut slots)?;
+        Ok(slots)
+    }
+
+    /// Recursively walk template nodes and collect every `<slot>` into `slots`.
+    fn collect_slots(
+        &mut self,
+        nodes: &[TemplateNode],
+        component_id: &str,
+        source_path: &str,
+        slots: &mut Vec<SlotPlaceholderIR>,
+    ) -> Result<(), CompileError> {
+        for node in nodes {
+            match node {
+                TemplateNode::Slot(slot) => {
+                    let fallback = if slot.fallback.is_empty() {
+                        None
+                    } else {
+                        let mut events = Vec::new();
+                        Some(self.compile_body(
+                            &slot.fallback,
+                            component_id,
+                            source_path,
+                            &mut events,
+                        )?)
+                    };
+                    slots.push(SlotPlaceholderIR {
+                        name: slot.name.clone(),
+                        fallback,
+                    });
+                }
+                TemplateNode::Element(el) => {
+                    self.collect_slots(&el.children, component_id, source_path, slots)?;
+                }
+                TemplateNode::If(if_node) => {
+                    self.collect_slots(
+                        &if_node.then_branch,
+                        component_id,
+                        source_path,
+                        slots,
+                    )?;
+                    for (_, branch) in &if_node.else_if_branches {
+                        self.collect_slots(branch, component_id, source_path, slots)?;
+                    }
+                    if let Some(ref branch) = if_node.else_branch {
+                        self.collect_slots(branch, component_id, source_path, slots)?;
+                    }
+                }
+                TemplateNode::Each(each) => {
+                    self.collect_slots(&each.children, component_id, source_path, slots)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Default for Compiler {
@@ -1030,4 +1146,77 @@ fn collect_child_components(nodes: &[TemplateNode]) -> Vec<String> {
     }
 
     children
+}
+
+// ---------------------------------------------------------------------------
+// Tests for slot/fill compilation
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compile_fill_node() {
+        let file = adapto_parser::parse(
+            r#"<route>
+    path: "/test"
+    layout: "main"
+</route>
+<template>
+    {#fill sidebar}
+        <nav>Side</nav>
+    {/fill}
+    <h1>Main</h1>
+</template>"#,
+        )
+        .unwrap();
+
+        let mut compiler = Compiler::new();
+        let output = compiler.compile_file(&file, "test.adapto").unwrap();
+        assert_eq!(output.component_ir.fills.len(), 1);
+        assert_eq!(output.component_ir.fills[0].slot_name, "sidebar");
+    }
+
+    #[test]
+    fn compile_slot_with_fallback() {
+        let file = adapto_parser::parse(
+            r#"<layout name="base">
+</layout>
+<template>
+    <slot name="sidebar"><p>Default</p></slot>
+    <slot/>
+</template>"#,
+        )
+        .unwrap();
+
+        let mut compiler = Compiler::new();
+        let output = compiler.compile_file(&file, "layouts/base.adapto").unwrap();
+        assert_eq!(output.component_ir.slot_placeholders.len(), 2);
+        assert_eq!(
+            output.component_ir.slot_placeholders[0].name,
+            Some("sidebar".to_string())
+        );
+        assert!(output.component_ir.slot_placeholders[0].fallback.is_some());
+        assert!(output.component_ir.slot_placeholders[1].name.is_none());
+    }
+
+    #[test]
+    fn compile_duplicate_fill_error() {
+        let file = adapto_parser::parse(
+            r#"<route>
+    path: "/test"
+    layout: "main"
+</route>
+<template>
+    {#fill sidebar}<p>A</p>{/fill}
+    {#fill sidebar}<p>B</p>{/fill}
+</template>"#,
+        )
+        .unwrap();
+
+        let mut compiler = Compiler::new();
+        let result = compiler.compile_file(&file, "test.adapto");
+        assert!(result.is_err());
+    }
 }

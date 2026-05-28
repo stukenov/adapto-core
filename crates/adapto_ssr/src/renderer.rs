@@ -419,6 +419,8 @@ mod tests {
             children: vec![],
             is_island: false,
             style: None,
+            slot_placeholders: vec![],
+            fills: vec![],
         }
     }
 
@@ -454,6 +456,8 @@ mod tests {
             children: vec![],
             is_island: false,
             style: None,
+            slot_placeholders: vec![],
+            fills: vec![],
         }
     }
 
@@ -479,6 +483,8 @@ mod tests {
             children: vec![],
             is_island: false,
             style: None,
+            slot_placeholders: vec![],
+            fills: vec![],
         }
     }
 

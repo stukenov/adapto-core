@@ -45,6 +45,8 @@ fn make_ir() -> ComponentIR {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     }
 }
 
@@ -955,6 +957,8 @@ fn make_ir_with_defaults() -> ComponentIR {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     }
 }
 

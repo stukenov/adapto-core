@@ -386,6 +386,8 @@ fn test_codegen_state_struct() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let mut gen = CodeGenerator::new();
@@ -433,6 +435,8 @@ fn test_codegen_render_function() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let mut gen = CodeGenerator::new();
@@ -481,6 +485,8 @@ fn test_codegen_event_handler() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let mut gen = CodeGenerator::new();
@@ -1114,6 +1120,8 @@ fn test_codegen_form_struct() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let mut gen = CodeGenerator::new();
@@ -1643,6 +1651,8 @@ fn test_codegen_full_structure() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let mut gen = CodeGenerator::new();
@@ -1690,6 +1700,8 @@ fn test_codegen_no_actions_handler() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let mut gen = CodeGenerator::new();
@@ -1902,6 +1914,8 @@ fn test_codegen_renders_all_segment_types() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let mut gen = CodeGenerator::new();
@@ -2027,6 +2041,8 @@ fn test_codegen_form_with_all_constraints() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let mut gen = CodeGenerator::new();

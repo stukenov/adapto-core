@@ -20,6 +20,8 @@ pub struct ComponentIR {
     pub children: Vec<String>,
     pub is_island: bool,
     pub style: Option<CompiledStyle>,
+    pub slot_placeholders: Vec<SlotPlaceholderIR>,
+    pub fills: Vec<FillSegmentIR>,
 }
 
 /// A dynamic segment within a compiled template.
@@ -59,6 +61,18 @@ pub struct SegmentBody {
 pub struct LoopBody {
     pub item_var: String,
     pub index_var: Option<String>,
+    pub body: SegmentBody,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlotPlaceholderIR {
+    pub name: Option<String>,
+    pub fallback: Option<SegmentBody>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FillSegmentIR {
+    pub slot_name: String,
     pub body: SegmentBody,
 }
 
@@ -190,4 +204,43 @@ pub struct CompiledStyle {
     pub css: String,
     pub scoped: bool,
     pub scope_id: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slot_placeholder_default() {
+        let slot = SlotPlaceholderIR {
+            name: None,
+            fallback: None,
+        };
+        assert!(slot.name.is_none());
+    }
+
+    #[test]
+    fn slot_placeholder_named_with_fallback() {
+        let slot = SlotPlaceholderIR {
+            name: Some("sidebar".to_string()),
+            fallback: Some(SegmentBody {
+                static_segments: vec!["<p>Default sidebar</p>".into()],
+                dynamic_segments: vec![],
+            }),
+        };
+        assert_eq!(slot.name, Some("sidebar".to_string()));
+        assert!(slot.fallback.is_some());
+    }
+
+    #[test]
+    fn fill_segment_construction() {
+        let fill = FillSegmentIR {
+            slot_name: "head".to_string(),
+            body: SegmentBody {
+                static_segments: vec!["<title>My Page</title>".into()],
+                dynamic_segments: vec![],
+            },
+        };
+        assert_eq!(fill.slot_name, "head");
+    }
 }

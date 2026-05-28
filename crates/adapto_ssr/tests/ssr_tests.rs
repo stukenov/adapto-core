@@ -82,6 +82,8 @@ fn static_ir(id: &str, name: &str) -> ComponentIR {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     }
 }
 
@@ -107,6 +109,8 @@ fn dynamic_ir() -> ComponentIR {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     }
 }
 
@@ -132,6 +136,8 @@ fn event_ir() -> ComponentIR {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     }
 }
 
@@ -318,6 +324,8 @@ fn renderer_eval_expr_from_state() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let html = renderer.render_component(&ir, &state).unwrap();
@@ -574,6 +582,8 @@ fn renderer_html_escapes_dynamic_values() {
         children: vec![],
         is_island: false,
         style: None,
+        slot_placeholders: vec![],
+        fills: vec![],
     };
 
     let mut state = StateStore::new();
