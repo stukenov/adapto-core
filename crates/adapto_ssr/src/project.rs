@@ -8,7 +8,7 @@ use adapto_compiler::manifest::RouteManifest;
 use adapto_runtime::resource::ResourceManager;
 
 use crate::error::SsrError;
-use crate::layout::LayoutManager;
+use crate::layout::{CompiledLayout, LayoutManager, SlotDefinition};
 use crate::page::PageRenderer;
 use crate::router::Router;
 
@@ -52,7 +52,12 @@ impl ProjectLoader {
                     .as_ref()
                     .map(|t| template_to_raw_html(t))
                     .unwrap_or_default();
-                layout_manager.register(&layout.name, template_html);
+                layout_manager.register(&layout.name, CompiledLayout {
+                    name: layout.name.clone(),
+                    parent: layout.parent_layout.clone(),
+                    slots: vec![SlotDefinition { name: None, fallback_html: None }],
+                    template_html,
+                });
             }
 
             let output = compiler.compile_file(&ast, file_path)

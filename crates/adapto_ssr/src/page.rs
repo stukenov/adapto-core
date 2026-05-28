@@ -133,24 +133,12 @@ impl PageRenderer {
         let layout_template = route_match
             .layout
             .as_ref()
-            .and_then(|name| {
-                if self.layouts.has_layout(name) {
-                    // render_page expects a template with {slot} placeholder.
-                    // We retrieve it through compose with a sentinel, then
-                    // reverse-engineer the template. This is a temporary
-                    // approach — a production implementation would expose
-                    // the raw template.
-                    Some(self.get_layout_template(name))
-                } else {
-                    None
-                }
-            })
-            .flatten();
+            .and_then(|name| self.layouts.get_template(name));
 
         let (html, session_id) = self.renderer.render_page(
             ir,
             &initial_state,
-            layout_template.as_deref(),
+            layout_template,
         )?;
 
         // 6. Response.
@@ -163,18 +151,6 @@ impl PageRenderer {
         })
     }
 
-    /// Retrieve a layout template by composing with a known sentinel
-    /// and then extracting the template structure.
-    ///
-    /// This is a pragmatic workaround — a layout template is stored as
-    /// a string with `{slot}`. We compose it with the sentinel to verify
-    /// it exists, then reconstruct. In practice the LayoutManager should
-    /// expose a `get_template` method, but this keeps the public API
-    /// minimal for now.
-    fn get_layout_template(&self, name: &str) -> Option<String> {
-        // Compose with the placeholder itself to get the template back.
-        self.layouts.compose(name, "{slot}").ok()
-    }
 }
 
 #[cfg(test)]
@@ -280,14 +256,18 @@ mod tests {
     }
 
     fn build_page_renderer() -> PageRenderer {
+        use crate::layout::CompiledLayout;
+
         let mut pr = PageRenderer::new(b"test-secret-key");
         pr.set_router(Router::new(test_manifest()));
 
         let mut layouts = LayoutManager::new();
-        layouts.register(
-            "main",
-            "<html><body><nav>Nav</nav><main>{slot}</main></body></html>".into(),
-        );
+        layouts.register("main", CompiledLayout {
+            name: "main".into(),
+            parent: None,
+            slots: vec![],
+            template_html: "<html><body><nav>Nav</nav><main>{slot}</main></body></html>".into(),
+        });
         pr.set_layouts(layouts);
 
         pr.register_component("home", test_ir("home", "Home"));

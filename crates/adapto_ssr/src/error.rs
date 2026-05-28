@@ -28,4 +28,10 @@ pub enum SsrError {
 
     #[error("Project error: {0}")]
     ProjectError(String),
+
+    #[error("Layout cycle detected: {0}")]
+    LayoutCycle(String),
+
+    #[error("Layout chain exceeds maximum depth of {0}")]
+    LayoutDepthExceeded(usize),
 }

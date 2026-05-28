@@ -6,7 +6,7 @@ use adapto_runtime::context::{Ctx, PermissionSet};
 use adapto_runtime::state::StateStore;
 use adapto_runtime::types::*;
 use adapto_ssr::error::SsrError;
-use adapto_ssr::layout::LayoutManager;
+use adapto_ssr::layout::{CompiledLayout, LayoutManager};
 use adapto_ssr::page::PageRenderer;
 use adapto_ssr::renderer::Renderer;
 use adapto_ssr::router::Router;
@@ -238,12 +238,14 @@ fn router_extract_params() {
 #[test]
 fn layout_register_and_compose() {
     let mut mgr = LayoutManager::new();
-    mgr.register(
-        "shell",
-        "<html><body><header>H</header>{slot}<footer>F</footer></body></html>".into(),
-    );
+    mgr.register("shell", CompiledLayout {
+        name: "shell".into(),
+        parent: None,
+        slots: vec![],
+        template_html: "<html><body><header>H</header>{slot}<footer>F</footer></body></html>".into(),
+    });
 
-    let html = mgr.compose("shell", "<main>Content</main>").unwrap();
+    let html = mgr.compose("shell", "<main>Content</main>", &std::collections::HashMap::new()).unwrap();
     assert!(html.contains("<header>H</header>"));
     assert!(html.contains("<main>Content</main>"));
     assert!(html.contains("<footer>F</footer>"));
@@ -252,7 +254,7 @@ fn layout_register_and_compose() {
 #[test]
 fn layout_unknown_layout_error() {
     let mgr = LayoutManager::new();
-    let result = mgr.compose("ghost", "content");
+    let result = mgr.compose("ghost", "content", &std::collections::HashMap::new());
     assert!(result.is_err());
     match result.unwrap_err() {
         SsrError::LayoutNotFound(name) => assert_eq!(name, "ghost"),
@@ -388,10 +390,12 @@ fn build_page_renderer() -> PageRenderer {
     pr.set_router(Router::new(simple_manifest()));
 
     let mut layouts = LayoutManager::new();
-    layouts.register(
-        "main",
-        "<html><body><nav>Nav</nav><main>{slot}</main></body></html>".into(),
-    );
+    layouts.register("main", CompiledLayout {
+        name: "main".into(),
+        parent: None,
+        slots: vec![],
+        template_html: "<html><body><nav>Nav</nav><main>{slot}</main></body></html>".into(),
+    });
     pr.set_layouts(layouts);
 
     pr.register_component("home", static_ir("home", "Home"));
@@ -463,26 +467,46 @@ fn page_route_not_found() {
 fn layout_has_layout_true_after_register() {
     let mut mgr = LayoutManager::new();
     assert!(!mgr.has_layout("admin"));
-    mgr.register("admin", "<div>{slot}</div>".into());
+    mgr.register("admin", CompiledLayout {
+        name: "admin".into(),
+        parent: None,
+        slots: vec![],
+        template_html: "<div>{slot}</div>".into(),
+    });
     assert!(mgr.has_layout("admin"));
 }
 
 #[test]
 fn layout_compose_replaces_slot_exactly_once() {
     let mut mgr = LayoutManager::new();
-    mgr.register("wrap", "<main>{slot}</main>".into());
-    let html = mgr.compose("wrap", "<p>inner</p>").unwrap();
+    mgr.register("wrap", CompiledLayout {
+        name: "wrap".into(),
+        parent: None,
+        slots: vec![],
+        template_html: "<main>{slot}</main>".into(),
+    });
+    let html = mgr.compose("wrap", "<p>inner</p>", &std::collections::HashMap::new()).unwrap();
     assert_eq!(html, "<main><p>inner</p></main>");
 }
 
 #[test]
 fn layout_multiple_layouts_independent() {
     let mut mgr = LayoutManager::new();
-    mgr.register("a", "<div>A:{slot}</div>".into());
-    mgr.register("b", "<section>B:{slot}</section>".into());
+    mgr.register("a", CompiledLayout {
+        name: "a".into(),
+        parent: None,
+        slots: vec![],
+        template_html: "<div>A:{slot}</div>".into(),
+    });
+    mgr.register("b", CompiledLayout {
+        name: "b".into(),
+        parent: None,
+        slots: vec![],
+        template_html: "<section>B:{slot}</section>".into(),
+    });
 
-    let ha = mgr.compose("a", "X").unwrap();
-    let hb = mgr.compose("b", "Y").unwrap();
+    let ha = mgr.compose("a", "X", &std::collections::HashMap::new()).unwrap();
+    let hb = mgr.compose("b", "Y", &std::collections::HashMap::new()).unwrap();
     assert_eq!(ha, "<div>A:X</div>");
     assert_eq!(hb, "<section>B:Y</section>");
 }
@@ -490,7 +514,7 @@ fn layout_multiple_layouts_independent() {
 #[test]
 fn layout_missing_layout_returns_correct_name() {
     let mgr = LayoutManager::new();
-    match mgr.compose("nonexistent", "c").unwrap_err() {
+    match mgr.compose("nonexistent", "c", &std::collections::HashMap::new()).unwrap_err() {
         SsrError::LayoutNotFound(name) => assert_eq!(name, "nonexistent"),
         other => panic!("Expected LayoutNotFound, got: {:?}", other),
     }
