@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [Unreleased]
+
+### Added
+- **Template Inheritance** — layouts are now full `.adapto` files with `<slot/>` and `<slot name="..."/>` placeholders
+  - Pages fill named slots via `{#fill name}...{/fill}` syntax
+  - Multi-level layout chains: page → child layout → parent layout
+  - Named slots with fallback content
+  - Cycle detection and max depth (10) enforcement
+  - `adapto_parser`: `FillNode` AST type, `{#fill}` parsing, `layout:` field in `<layout>` block
+  - `adapto_compiler`: `SlotPlaceholderIR`, `FillSegmentIR`, duplicate fill detection
+  - `adapto_ssr`: rewritten `LayoutManager` with chain resolution and slot-based composition
+
 ## [0.2.5] - 2026-05-27
 
 ### Added

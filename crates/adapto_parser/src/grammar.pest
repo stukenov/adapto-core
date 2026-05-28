@@ -87,7 +87,8 @@ rust_code  = { (!("}" ~ PEEK) ~ ANY)* }
 template_block = { "<template>" ~ template_body ~ "</template>" }
 template_body  = { template_node* }
 template_node  = {
-    if_block
+    fill_block
+  | if_block
   | each_block
   | match_block
   | can_block
@@ -108,6 +109,7 @@ each_block  = { "{#each" ~ expr ~ "as" ~ ident ~ ("," ~ ident)? ~ "}" ~ template
 match_block = { "{#match" ~ expr ~ "}" ~ when_arm* ~ "{/match}" }
 when_arm    = { "{:when" ~ expr ~ "}" ~ template_body }
 can_block   = { "{#can" ~ quoted_string ~ "}" ~ template_body ~ "{/can}" }
+fill_block  = { "{#fill" ~ ident ~ "}" ~ template_body ~ "{/fill}" }
 
 // Expressions
 expression   = { "{" ~ expr ~ "}" }
@@ -180,7 +182,7 @@ layout_block = { "<layout" ~ layout_attrs ~ ">" ~ layout_body ~ "</layout>" }
 layout_attrs = { ("name=" ~ quoted_string)? }
 layout_body  = { (layout_field | NEWLINE | COMMENT)* }
 layout_field = { layout_key ~ ":" ~ layout_value }
-layout_key   = { "auth" | "tenant" }
+layout_key   = { "auth" | "tenant" | "layout" }
 layout_value = { bare_ident }
 
 // ---------------------------------------------------------------------------
