@@ -131,7 +131,7 @@ fn find_matching_close(s: &str, kind: &str) -> Option<usize> {
             }
             pos += open_tag.len();
         } else {
-            pos += 1;
+            pos += s[pos..].chars().next().map_or(1, |c| c.len_utf8());
         }
     }
     None
@@ -2095,6 +2095,7 @@ fn parse_layout_block(
 
     Ok(LayoutBlock {
         name,
+        parent_layout: None,
         auth,
         tenant,
     })

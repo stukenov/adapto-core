@@ -186,6 +186,7 @@ pub enum TemplateNode {
     Match(MatchNode),
     Can(CanNode),
     Slot(SlotNode),
+    Fill(FillNode),          // NEW
     Component(ComponentNode),
     ErrorBoundary(ErrorBoundaryNode),
 }
@@ -275,6 +276,12 @@ pub struct SlotNode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FillNode {
+    pub slot_name: String,
+    pub children: Vec<TemplateNode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentNode {
     pub name: String,
     pub props: Vec<Attribute>,
@@ -334,9 +341,48 @@ pub struct ResourcePermission {
 // Layout
 // ---------------------------------------------------------------------------
 
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LayoutBlock {
     pub name: String,
+    pub parent_layout: Option<String>,  // NEW
     pub auth: Option<AuthLevel>,
     pub tenant: Option<TenantLevel>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fill_node_construction() {
+        let fill = FillNode {
+            slot_name: "sidebar".to_string(),
+            children: vec![TemplateNode::Text("nav content".to_string())],
+        };
+        assert_eq!(fill.slot_name, "sidebar");
+        assert_eq!(fill.children.len(), 1);
+    }
+
+    #[test]
+    fn layout_block_with_parent() {
+        let layout = LayoutBlock {
+            name: "dashboard".to_string(),
+            parent_layout: Some("base".to_string()),
+            auth: None,
+            tenant: None,
+        };
+        assert_eq!(layout.parent_layout, Some("base".to_string()));
+    }
+
+    #[test]
+    fn layout_block_without_parent() {
+        let layout = LayoutBlock {
+            name: "base".to_string(),
+            parent_layout: None,
+            auth: Some(AuthLevel::Public),
+            tenant: None,
+        };
+        assert!(layout.parent_layout.is_none());
+    }
 }

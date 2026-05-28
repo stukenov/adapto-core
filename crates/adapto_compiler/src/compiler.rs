@@ -527,6 +527,10 @@ impl Compiler {
                 }
             }
 
+            TemplateNode::Fill(_fill) => {
+                // Will be implemented in Task 5
+            }
+
             TemplateNode::ErrorBoundary(eb) => {
                 static_parts.push("<!-- error-boundary -->".to_string());
                 for child in &eb.children {

@@ -189,6 +189,9 @@ fn node_to_html(node: &adapto_parser::ast::TemplateNode, out: &mut String) {
         TemplateNode::ErrorBoundary(eb) => {
             for child in &eb.children { node_to_html(child, out); }
         }
+        TemplateNode::Fill(_fill) => {
+            // Will be implemented in Task 5
+        }
     }
 }
 
