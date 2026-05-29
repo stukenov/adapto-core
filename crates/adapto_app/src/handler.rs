@@ -16,6 +16,8 @@ pub struct AppState {
     pub store: AdaptoStore,
     pub handlers: ActionHandlerMap,
     pub title: String,
+    /// Running scheduler handle, if a scheduler was attached via `App::scheduler`.
+    pub scheduler: Option<adapto_scheduler::SchedulerHandle>,
 }
 
 /// The result of handling an action: a list of DOM patches to send back.

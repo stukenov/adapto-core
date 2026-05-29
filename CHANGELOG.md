@@ -8,6 +8,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- **adapto_scheduler** — new crate: a persistent, priority + lane background-job scheduler.
+  - `Schedule` enum — `Interval`, `DailyAt`, `WeeklyOn`, `MonthlyOn`, plus a `Cron(String)` escape hatch; all timezone-aware via `next_after`.
+  - Two lanes: `Light` (configurable worker pool, default 4) and `Heavy` (serial); `Priority` orders ready jobs within a lane.
+  - Per-job `catch_up` (coalesced single run for missed schedules after downtime) and capped exponential-backoff retry (default 3 attempts: 1m/5m/15m).
+  - State persisted in the `_jobs` collection (`next_run` is the source of truth → restart-safe); panic-isolated handlers; graceful drain on shutdown.
+  - `Reloadable<T>` — lock-free `ArcSwap`-based cache so job-updated datasets appear without a restart.
+  - `admin::render()` — server-side HTML jobs table with run-now buttons.
+  - 22 unit + 5 integration tests.
+- **adapto_app scheduler integration** — `App::scheduler(Scheduler)` spawns the scheduler in `build()`/`run()` and drains it on graceful shutdown; `App::scheduler_admin(path, guard)` mounts a **mandatorily-guarded** admin page (`GET path`) + run-now trigger (`POST path/:job/run`, 403 without the guard); `RequestContext::scheduler()` exposes the handle to any route. (`adapto_app/src/lib.rs`, `handler.rs`)
+- **adapto_store vector search** — TF-IDF fuzzy text matching for data normalization, gated behind the `vector` feature flag (zero new dependencies). (`adapto_store/src/vector.rs`)
+  - `VectorIndex` — TF-IDF + character-trigram index, L2-normalized sparse cosine similarity. `add()` / `build()` / `search()` / `search_one()` / `batch_search()` / `normalize()`. Word-order invariant, case/hyphen insensitive (Cyrillic-friendly).
+  - `Collection::normalize_field()` — match a text field against an index, write `{target}` + `{target}_score` to each document.
+  - `Collection::normalize_name_field()` — extract legal form (via index) + clean name (via quotes) from a name field in one pass.
+  - `Collection::parse_address_field()` — parse comma-separated addresses into `postal_code` / `region` / `city` / `street` using region & city reference indexes.
+  - Free functions: `extract_quoted()` (balanced nesting for `«»` — `«A «B»»` → `A «B»`; greedy first-open..last-close fallback for unbalanced source), `extract_prefix()`, `parse_address()`. Result structs: `NormalizeResult`, `AddressResult`, `ParsedAddress`.
+  - Validated on 977K KZ company records: ОКЭД 99%+, legal form 99.8%, clean name 98.4%, address region 100% / city ~95% against the КАТО classifier.
+  - 17 unit tests + 5 doctests.
 - **Template Inheritance** — layouts are now full `.adapto` files with `<slot/>` and `<slot name="..."/>` placeholders
   - Pages fill named slots via `{#fill name}...{/fill}` syntax
   - Multi-level layout chains: page → child layout → parent layout

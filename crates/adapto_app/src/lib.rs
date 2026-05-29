@@ -228,6 +228,11 @@ impl RequestContext {
         &self.state.store
     }
 
+    /// The running scheduler handle, if a scheduler was attached to the app.
+    pub fn scheduler(&self) -> Option<&adapto_scheduler::SchedulerHandle> {
+        self.state.scheduler.as_ref()
+    }
+
     pub fn param(&self, name: &str) -> &str {
         self.params.get(name).map(|s| s.as_str()).unwrap_or("")
     }
@@ -405,6 +410,8 @@ pub struct App {
     shutdown_hooks: Vec<Box<dyn FnOnce() + Send>>,
     health_path: Option<String>,
     error_handler: Option<Arc<dyn Fn(StatusCode, String) -> String + Send + Sync>>,
+    scheduler: Option<adapto_scheduler::Scheduler>,
+    scheduler_admin: Option<(String, Arc<dyn Fn(&RequestContext) -> bool + Send + Sync>)>,
 }
 
 impl App {
@@ -427,7 +434,30 @@ impl App {
             shutdown_hooks: Vec::new(),
             health_path: None,
             error_handler: None,
+            scheduler: None,
+            scheduler_admin: None,
         }
+    }
+
+    /// Attach a background-job scheduler. It is spawned when the app starts
+    /// (`run()` or `test_client()`), and drained on graceful shutdown.
+    pub fn scheduler(mut self, scheduler: adapto_scheduler::Scheduler) -> Self {
+        self.scheduler = Some(scheduler);
+        self
+    }
+
+    /// Mount a guarded scheduler admin page at `path` (GET) plus a run-now
+    /// trigger at `POST {path}/:job/run`.
+    ///
+    /// `guard` MUST return `true` only for authorized requests; any request for
+    /// which it returns `false` receives `403 Forbidden`. There is no unguarded
+    /// variant — the page cannot be mounted without an authorization check.
+    pub fn scheduler_admin<G>(mut self, path: &str, guard: G) -> Self
+    where
+        G: Fn(&RequestContext) -> bool + Send + Sync + 'static,
+    {
+        self.scheduler_admin = Some((path.to_string(), Arc::new(guard)));
+        self
     }
 
     /// Set the port to listen on. Defaults to 3000.
@@ -967,8 +997,80 @@ impl App {
 
     /// Build the configured Router without binding to a TCP listener.
     /// Useful for testing with `axum::extract::connect_info::MockConnectInfo`.
-    pub fn build(self) -> Result<(Router, Vec<Box<dyn FnOnce() + Send>>), Box<dyn std::error::Error>> {
+    #[allow(clippy::type_complexity)]
+    pub fn build(
+        mut self,
+    ) -> Result<
+        (
+            Router,
+            Vec<Box<dyn FnOnce() + Send>>,
+            Option<adapto_scheduler::SchedulerHandle>,
+        ),
+        Box<dyn std::error::Error>,
+    > {
         let _ = tracing_subscriber::fmt::try_init();
+
+        // Spawn the scheduler (if attached) before assembling state, so its
+        // handle can be shared with request handlers and the admin routes.
+        let scheduler_handle = self.scheduler.take().map(|s| s.spawn());
+
+        // Register the guarded admin routes (if configured) before the
+        // custom-route loop consumes `self.custom_routes`.
+        if let Some((path, guard)) = self.scheduler_admin.clone() {
+            let base = path.clone();
+
+            let g_get = guard.clone();
+            let base_get = base.clone();
+            self.custom_routes.push(CustomRoute {
+                path: base.clone(),
+                method: HttpMethod::Get,
+                handler: Arc::new(move |ctx: RequestContext| {
+                    let g = g_get.clone();
+                    let base = base_get.clone();
+                    Box::pin(async move {
+                        if !g(&ctx) {
+                            return PageResponse::Forbidden("<h1>403 Forbidden</h1>".to_string());
+                        }
+                        match ctx.scheduler() {
+                            Some(h) => PageResponse::Ok(adapto_scheduler::admin::render(
+                                &h.statuses(),
+                                &base,
+                            )),
+                            None => PageResponse::Ok(
+                                "<h1>Scheduler not configured</h1>".to_string(),
+                            ),
+                        }
+                    })
+                }),
+                lang_code: String::new(),
+                lang_prefix: String::new(),
+                wrap_layout: true,
+            });
+
+            let g_post = guard.clone();
+            let base_post = base.clone();
+            self.custom_routes.push(CustomRoute {
+                path: format!("{base}/:job/run"),
+                method: HttpMethod::Post,
+                handler: Arc::new(move |ctx: RequestContext| {
+                    let g = g_post.clone();
+                    let base = base_post.clone();
+                    Box::pin(async move {
+                        if !g(&ctx) {
+                            return PageResponse::Forbidden("<h1>403 Forbidden</h1>".to_string());
+                        }
+                        let job = ctx.param("job").to_string();
+                        if let Some(h) = ctx.scheduler() {
+                            let _ = h.trigger(&job).await;
+                        }
+                        PageResponse::Redirect(base)
+                    })
+                }),
+                lang_code: String::new(),
+                lang_prefix: String::new(),
+                wrap_layout: false,
+            });
+        }
 
         let store = if let Some(s) = self.prebuilt_store {
             s
@@ -997,6 +1099,7 @@ impl App {
             store,
             handlers,
             title: self.title.clone(),
+            scheduler: scheduler_handle.clone(),
         });
 
         let mut router = Router::new();
@@ -1239,7 +1342,7 @@ impl App {
             router = layer_fn(router);
         }
 
-        Ok((router, self.shutdown_hooks))
+        Ok((router, self.shutdown_hooks, scheduler_handle))
     }
 
     /// Start the application with graceful shutdown support.
@@ -1248,7 +1351,7 @@ impl App {
         let title = self.title.clone();
         let store_path = self.store_path.clone();
 
-        let (router, shutdown_hooks) = self.build()?;
+        let (router, shutdown_hooks, scheduler_handle) = self.build()?;
 
         println!();
         println!("  {} running at http://{}", title, addr);
@@ -1265,6 +1368,11 @@ impl App {
         axum::serve(listener, router)
             .with_graceful_shutdown(shutdown_signal())
             .await?;
+
+        // Drain in-flight scheduled jobs before running user shutdown hooks.
+        if let Some(ref h) = scheduler_handle {
+            h.shutdown().await;
+        }
 
         for hook in shutdown_hooks {
             hook();
@@ -1368,7 +1476,7 @@ pub use axum_test_client::TestResponse;
 impl App {
     /// Create a test client for this app (no TCP binding).
     pub fn test_client(self) -> TestClient {
-        let (router, _hooks) = self.build().expect("failed to build app for testing");
+        let (router, _hooks, _scheduler) = self.build().expect("failed to build app for testing");
         TestClient {
             inner: axum_test_client::InnerClient::new(router),
         }
