@@ -23,6 +23,8 @@ pub mod index;
 pub mod query;
 pub mod slug;
 pub mod tenant;
+#[cfg(feature = "vector")]
+pub mod vector;
 pub mod wal;
 
 // Re-exports for a clean public API.
@@ -34,6 +36,11 @@ pub use index::{IndexInfo, IndexKey};
 pub use query::{Filter, Query, SortDir, Update, UpdateResult};
 pub use slug::{slugify, is_valid_slug};
 pub use tenant::{TenantCollection, TenantScope};
+#[cfg(feature = "vector")]
+pub use vector::{
+    AddressResult, NormalizeResult, ParsedAddress, VectorIndex, extract_prefix, extract_quoted,
+    parse_address,
+};
 
 use engine::StorageEngine;
 use serde_json::Value;

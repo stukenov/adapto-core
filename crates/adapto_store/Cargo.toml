@@ -21,6 +21,10 @@ memmap2 = "0.9"
 regex = "1"
 rmp-serde = "1"
 
+[features]
+default = []
+vector = []
+
 [[bench]]
 name = "benchmark"
 harness = false
