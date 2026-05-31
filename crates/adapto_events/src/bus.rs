@@ -8,10 +8,10 @@ use crate::subscription::{Mode, Subscriber, Subscription};
 use adapto_store::AdaptoStore;
 use chrono::{DateTime, Utc};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Notify};
 
 /// Builder + owner of a set of subscriptions. Call [`EventBus::spawn`] to start.
 pub struct EventBus {
@@ -19,19 +19,23 @@ pub struct EventBus {
     pub(crate) broadcast_capacity: usize,
     pub(crate) gc_interval: Duration,
     pub(crate) retention: Duration,
+    pub(crate) retry_backoff: Duration,
+    pub(crate) shutdown_grace: Duration,
     pub(crate) subscribers: Vec<Subscriber>,
     pub(crate) now_fn: fn() -> DateTime<Utc>,
 }
 
 impl EventBus {
     /// Create a bus bound to a store. Defaults: 1024 broadcast capacity, 5m GC
-    /// interval, 24h retention.
+    /// interval, 24h retention, 2s base retry backoff, 5s shutdown grace.
     pub fn new(store: AdaptoStore) -> Self {
         EventBus {
             store,
             broadcast_capacity: 1024,
             gc_interval: Duration::from_secs(300),
             retention: Duration::from_secs(86_400),
+            retry_backoff: Duration::from_secs(2),
+            shutdown_grace: Duration::from_secs(5),
             subscribers: Vec::new(),
             now_fn: Utc::now,
         }
@@ -52,6 +56,20 @@ impl EventBus {
     /// Dead-letter retention floor (default 24 hours).
     pub fn retention(mut self, d: Duration) -> Self {
         self.retention = d;
+        self
+    }
+
+    /// Base delay between durable handler retries; doubles per attempt, capped
+    /// at 16× (default 2 seconds).
+    pub fn retry_backoff(mut self, d: Duration) -> Self {
+        self.retry_backoff = d;
+        self
+    }
+
+    /// How long [`EventBusHandle::shutdown`] waits for in-flight durable
+    /// handlers to drain (default 5 seconds).
+    pub fn shutdown_grace(mut self, d: Duration) -> Self {
+        self.shutdown_grace = d;
         self
     }
 
@@ -88,6 +106,11 @@ impl EventBus {
                 durable_topics,
                 subscribers: self.subscribers.clone(),
                 now_fn: self.now_fn,
+                retry_backoff: self.retry_backoff,
+                shutdown_grace: self.shutdown_grace,
+                closed: AtomicBool::new(false),
+                shutdown: Notify::new(),
+                inflight: AtomicUsize::new(0),
             }),
         };
         crate::dispatch::start(&handle, &self.subscribers, self.gc_interval, self.retention);
@@ -108,6 +131,11 @@ pub(crate) struct HandleInner {
     pub(crate) durable_topics: HashSet<&'static str>,
     pub(crate) subscribers: Vec<Subscriber>,
     pub(crate) now_fn: fn() -> DateTime<Utc>,
+    pub(crate) retry_backoff: Duration,
+    pub(crate) shutdown_grace: Duration,
+    pub(crate) closed: AtomicBool,
+    pub(crate) shutdown: Notify,
+    pub(crate) inflight: AtomicUsize,
 }
 
 impl EventBusHandle {
@@ -138,6 +166,24 @@ impl EventBusHandle {
     /// Async convenience wrapper around [`EventBusHandle::emit`].
     pub async fn publish<E: Event>(&self, e: E) {
         self.emit(e);
+    }
+
+    /// The current seq high-water mark (last assigned seq).
+    pub(crate) fn current_seq(&self) -> u64 {
+        self.inner.seq.load(Ordering::SeqCst)
+    }
+
+    /// Stop dispatchers and wait for in-flight durable handlers to drain (bounded
+    /// by the configured shutdown grace).
+    pub async fn shutdown(&self) {
+        self.inner.closed.store(true, Ordering::SeqCst);
+        self.inner.shutdown.notify_waiters();
+        let deadline = tokio::time::Instant::now() + self.inner.shutdown_grace;
+        while self.inner.inflight.load(Ordering::SeqCst) > 0
+            && tokio::time::Instant::now() < deadline
+        {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
     }
 }
 
