@@ -47,6 +47,7 @@ name = "adapto_app"
 version = "0.2.5"
 dependencies = [
  "adapto_client_protocol",
+ "adapto_events",
  "adapto_scheduler",
  "adapto_store",
  "adapto_ui",

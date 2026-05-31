@@ -18,6 +18,8 @@ pub struct AppState {
     pub title: String,
     /// Running scheduler handle, if a scheduler was attached via `App::scheduler`.
     pub scheduler: Option<adapto_scheduler::SchedulerHandle>,
+    /// Running event-bus handle, if a bus was attached via `App::events`.
+    pub events: Option<adapto_events::EventBusHandle>,
 }
 
 /// The result of handling an action: a list of DOM patches to send back.

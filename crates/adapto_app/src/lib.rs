@@ -75,6 +75,12 @@ pub enum PageResponse {
         content_type: String,
         headers: Vec<(String, String)>,
     },
+    /// 200 OK with a binary body (images, fonts, etc.).
+    Bytes {
+        body: Vec<u8>,
+        content_type: &'static str,
+        headers: Vec<(String, String)>,
+    },
 }
 
 impl PageResponse {
@@ -144,6 +150,22 @@ fn page_response_to_axum(response: PageResponse) -> Response {
             let status = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
             let mut resp = (
                 status,
+                [(axum::http::header::CONTENT_TYPE, content_type)],
+                body,
+            ).into_response();
+            for (k, v) in headers {
+                if let (Ok(name), Ok(val)) = (
+                    axum::http::header::HeaderName::from_bytes(k.as_bytes()),
+                    HeaderValue::from_str(&v),
+                ) {
+                    resp.headers_mut().insert(name, val);
+                }
+            }
+            resp
+        }
+        PageResponse::Bytes { body, content_type, headers } => {
+            let mut resp = (
+                StatusCode::OK,
                 [(axum::http::header::CONTENT_TYPE, content_type)],
                 body,
             ).into_response();
@@ -231,6 +253,12 @@ impl RequestContext {
     /// The running scheduler handle, if a scheduler was attached to the app.
     pub fn scheduler(&self) -> Option<&adapto_scheduler::SchedulerHandle> {
         self.state.scheduler.as_ref()
+    }
+
+    /// The running event-bus handle, if a bus was attached to the app.
+    /// Publish from a handler with `ctx.events().unwrap().emit(MyEvent { .. })`.
+    pub fn events(&self) -> Option<&adapto_events::EventBusHandle> {
+        self.state.events.as_ref()
     }
 
     pub fn param(&self, name: &str) -> &str {
@@ -412,6 +440,8 @@ pub struct App {
     error_handler: Option<Arc<dyn Fn(StatusCode, String) -> String + Send + Sync>>,
     scheduler: Option<adapto_scheduler::Scheduler>,
     scheduler_admin: Option<(String, Arc<dyn Fn(&RequestContext) -> bool + Send + Sync>)>,
+    events: Option<adapto_events::EventBus>,
+    events_admin: Option<(String, Arc<dyn Fn(&RequestContext) -> bool + Send + Sync>)>,
 }
 
 impl App {
@@ -436,6 +466,8 @@ impl App {
             error_handler: None,
             scheduler: None,
             scheduler_admin: None,
+            events: None,
+            events_admin: None,
         }
     }
 
@@ -457,6 +489,27 @@ impl App {
         G: Fn(&RequestContext) -> bool + Send + Sync + 'static,
     {
         self.scheduler_admin = Some((path.to_string(), Arc::new(guard)));
+        self
+    }
+
+    /// Attach an event bus. It is spawned when the app starts (`run()` or
+    /// `test_client()`), shared with request handlers via `ctx.events()`, and
+    /// drained on graceful shutdown.
+    pub fn events(mut self, events: adapto_events::EventBus) -> Self {
+        self.events = Some(events);
+        self
+    }
+
+    /// Mount a guarded event-subscriptions admin page at `path` (GET).
+    ///
+    /// `guard` MUST return `true` only for authorized requests; any request for
+    /// which it returns `false` receives `403 Forbidden`. There is no unguarded
+    /// variant — the page cannot be mounted without an authorization check.
+    pub fn events_admin<G>(mut self, path: &str, guard: G) -> Self
+    where
+        G: Fn(&RequestContext) -> bool + Send + Sync + 'static,
+    {
+        self.events_admin = Some((path.to_string(), Arc::new(guard)));
         self
     }
 
@@ -1005,6 +1058,7 @@ impl App {
             Router,
             Vec<Box<dyn FnOnce() + Send>>,
             Option<adapto_scheduler::SchedulerHandle>,
+            Option<adapto_events::EventBusHandle>,
         ),
         Box<dyn std::error::Error>,
     > {
@@ -1013,6 +1067,8 @@ impl App {
         // Spawn the scheduler (if attached) before assembling state, so its
         // handle can be shared with request handlers and the admin routes.
         let scheduler_handle = self.scheduler.take().map(|s| s.spawn());
+        // Spawn the event bus (if attached) for the same reason.
+        let events_handle = self.events.take().map(|b| b.spawn());
 
         // Register the guarded admin routes (if configured) before the
         // custom-route loop consumes `self.custom_routes`.
@@ -1072,6 +1128,32 @@ impl App {
             });
         }
 
+        // Register the guarded events admin route (if configured).
+        if let Some((path, guard)) = self.events_admin.clone() {
+            let g_get = guard.clone();
+            self.custom_routes.push(CustomRoute {
+                path: path.clone(),
+                method: HttpMethod::Get,
+                handler: Arc::new(move |ctx: RequestContext| {
+                    let g = g_get.clone();
+                    Box::pin(async move {
+                        if !g(&ctx) {
+                            return PageResponse::Forbidden("<h1>403 Forbidden</h1>".to_string());
+                        }
+                        match ctx.events() {
+                            Some(h) => PageResponse::Ok(adapto_events::admin::render(&h.statuses())),
+                            None => {
+                                PageResponse::Ok("<h1>Event bus not configured</h1>".to_string())
+                            }
+                        }
+                    })
+                }),
+                lang_code: String::new(),
+                lang_prefix: String::new(),
+                wrap_layout: true,
+            });
+        }
+
         let store = if let Some(s) = self.prebuilt_store {
             s
         } else {
@@ -1100,6 +1182,7 @@ impl App {
             handlers,
             title: self.title.clone(),
             scheduler: scheduler_handle.clone(),
+            events: events_handle.clone(),
         });
 
         let mut router = Router::new();
@@ -1342,7 +1425,7 @@ impl App {
             router = layer_fn(router);
         }
 
-        Ok((router, self.shutdown_hooks, scheduler_handle))
+        Ok((router, self.shutdown_hooks, scheduler_handle, events_handle))
     }
 
     /// Start the application with graceful shutdown support.
@@ -1351,7 +1434,7 @@ impl App {
         let title = self.title.clone();
         let store_path = self.store_path.clone();
 
-        let (router, shutdown_hooks, scheduler_handle) = self.build()?;
+        let (router, shutdown_hooks, scheduler_handle, events_handle) = self.build()?;
 
         println!();
         println!("  {} running at http://{}", title, addr);
@@ -1371,6 +1454,10 @@ impl App {
 
         // Drain in-flight scheduled jobs before running user shutdown hooks.
         if let Some(ref h) = scheduler_handle {
+            h.shutdown().await;
+        }
+        // Drain in-flight durable event handlers.
+        if let Some(ref h) = events_handle {
             h.shutdown().await;
         }
 
@@ -1476,7 +1563,8 @@ pub use axum_test_client::TestResponse;
 impl App {
     /// Create a test client for this app (no TCP binding).
     pub fn test_client(self) -> TestClient {
-        let (router, _hooks, _scheduler) = self.build().expect("failed to build app for testing");
+        let (router, _hooks, _scheduler, _events) =
+            self.build().expect("failed to build app for testing");
         TestClient {
             inner: axum_test_client::InnerClient::new(router),
         }
