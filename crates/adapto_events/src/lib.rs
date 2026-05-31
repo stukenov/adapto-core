@@ -6,6 +6,8 @@
 
 pub mod event;
 mod state;
+mod subscription;
 mod throttle;
 
 pub use event::{Event, EventEnvelope, EventError};
+pub use subscription::{Mode, Subscription};
