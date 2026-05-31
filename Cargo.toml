@@ -23,6 +23,7 @@ members = [
     "crates/adapto_app",
     "crates/adapto",
     "examples/counter",
+    "examples/events_demo",
     "examples/customer_crm",
     "examples/school_ai",
     "examples/myqaz",

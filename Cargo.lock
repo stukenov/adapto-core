@@ -746,6 +746,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-events-demo"
+version = "0.2.5"
+dependencies = [
+ "adapto_app",
+ "adapto_events",
+ "adapto_store",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "example-myqaz"
 version = "0.2.5"
 dependencies = [
