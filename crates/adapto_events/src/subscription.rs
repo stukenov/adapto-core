@@ -35,6 +35,12 @@ impl Default for ThrottleCfg {
 }
 
 type BoxFut = Pin<Box<dyn Future<Output = Result<(), EventError>> + Send>>;
+/// Erased predicate: deserialize payload to `E`, apply the typed user filter.
+type PredicateFn = Arc<dyn Fn(&Value) -> bool + Send + Sync>;
+/// Erased coalesce-key extractor.
+type KeyFn = Arc<dyn Fn(&Value) -> Option<String> + Send + Sync>;
+/// Erased handler: deserialize payload to `E`, run the user closure.
+type HandlerFn = Arc<dyn Fn(Value) -> BoxFut + Send + Sync>;
 
 /// Type-erased subscriber stored and dispatched by the bus.
 #[derive(Clone)]
@@ -46,11 +52,11 @@ pub struct Subscriber {
     pub max_attempts: u32,
     /// Deserializes the payload to `E` then applies the typed user filter.
     /// Returns `false` if the payload does not deserialize to `E`.
-    pub predicate: Arc<dyn Fn(&Value) -> bool + Send + Sync>,
+    pub predicate: PredicateFn,
     /// Deserializes the payload to `E` then calls `E::coalesce_key`.
-    pub coalesce_key: Arc<dyn Fn(&Value) -> Option<String> + Send + Sync>,
+    pub coalesce_key: KeyFn,
     /// Deserializes the payload to `E` then runs the user handler.
-    pub handler: Arc<dyn Fn(Value) -> BoxFut + Send + Sync>,
+    pub handler: HandlerFn,
 }
 
 /// A typed subscription builder. Targets one event type `E`.
@@ -60,7 +66,7 @@ pub struct Subscription<E: Event> {
     throttle: ThrottleCfg,
     max_attempts: u32,
     filter: Arc<dyn Fn(&E) -> bool + Send + Sync>,
-    handler: Option<Arc<dyn Fn(Value) -> BoxFut + Send + Sync>>,
+    handler: Option<HandlerFn>,
     _marker: PhantomData<fn() -> E>,
 }
 
@@ -129,7 +135,7 @@ impl<E: Event> Subscription<E> {
         F: Fn(E) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<(), EventError>> + Send + 'static,
     {
-        let handler: Arc<dyn Fn(Value) -> BoxFut + Send + Sync> =
+        let handler: HandlerFn =
             Arc::new(move |v: Value| match serde_json::from_value::<E>(v) {
                 Ok(e) => Box::pin(f(e)) as BoxFut,
                 Err(err) => Box::pin(async move { Err(EventError::from_err(err)) }) as BoxFut,
@@ -144,15 +150,14 @@ impl<E: Event> Subscription<E> {
     /// Panics if [`Subscription::on`] was never called.
     pub fn build(self) -> Subscriber {
         let filter = self.filter.clone();
-        let predicate: Arc<dyn Fn(&Value) -> bool + Send + Sync> =
+        let predicate: PredicateFn =
             Arc::new(move |v: &Value| match serde_json::from_value::<E>(v.clone()) {
                 Ok(e) => filter(&e),
                 Err(_) => false,
             });
-        let coalesce_key: Arc<dyn Fn(&Value) -> Option<String> + Send + Sync> =
-            Arc::new(move |v: &Value| {
-                serde_json::from_value::<E>(v.clone()).ok().and_then(|e| e.coalesce_key())
-            });
+        let coalesce_key: KeyFn = Arc::new(move |v: &Value| {
+            serde_json::from_value::<E>(v.clone()).ok().and_then(|e| e.coalesce_key())
+        });
         Subscriber {
             id: self.id,
             topic: E::TOPIC,

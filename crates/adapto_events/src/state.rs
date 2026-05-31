@@ -79,7 +79,6 @@ pub fn load_events_after(store: &AdaptoStore, topic: &str, after_seq: u64) -> Ve
     let mut rows: Vec<EventRow> = store
         .collection(EVENTS)
         .find(q)
-        .into_iter()
         .filter_map(|d| serde_json::from_value(d.data).ok())
         .collect();
     rows.sort_by_key(|r: &EventRow| r.seq);
@@ -139,7 +138,6 @@ pub fn load_seq_highwater(store: &AdaptoStore) -> u64 {
     let max_event = store
         .collection(EVENTS)
         .find(Query::new())
-        .into_iter()
         .filter_map(|d| d.data.get("seq").and_then(Value::as_u64))
         .max()
         .unwrap_or(0);
