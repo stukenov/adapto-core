@@ -8,6 +8,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- **adapto_events** — new crate: an in-process, typed publish/subscribe message bus.
+  - `Event` trait — each message is a Rust type with a stable `TOPIC` and an optional `coalesce_key`; events are `serde`-serializable so durable ones persist in the log. Defined in any crate (including consumers).
+  - `Subscription<E>` — typed builder targeting one event type: `ephemeral` (at-most-once, in-memory broadcast) or `durable` (at-least-once, log + cursor + retry + dead-letter), with an optional typed `filter` predicate and `max_attempts`.
+  - Delivery-control primitives: `coalesce_by_key(window)` (suppress repeats of a key), `rate_limit(n, per)` (token bucket — durable paces, ephemeral drops), `sample(fraction)` (deterministic hash sampling). (`throttle.rs`)
+  - Durability model C: live delivery via `tokio::broadcast`; an append-only `_events` log (a store collection) plus a per-subscription cursor (`_event_cursors`). Durable dispatchers drain the log from their cursor, so restart catch-up is the same code path as live delivery. (`bus.rs`, `dispatch.rs`, `state.rs`)
+  - Poison handling: skip-after-N with exponential backoff → `_event_deadletter`, cursor advances, visible in the admin view. Log GC trims fully-consumed seqs (Kafka-style retention by min consumer offset); dead-letter pruned by retention.
+  - The bus only routes; heavy work is handed to `adapto_scheduler` by the handler (no crate dependency between them).
+  - `admin::SubscriptionStatus` + `admin::render()` — server-side HTML subscriptions table (cursor, lag, processed/failed, dead-letter).
+  - 34 unit + 1 integration test. Spec/plan: `docs/superpowers/specs/2026-05-31-event-bus-design.md`, `docs/superpowers/plans/2026-05-31-event-bus.md`.
+- **adapto_app events integration** — `App::events(EventBus)` spawns the bus in `build()`/`run()` and drains it on graceful shutdown; `App::events_admin(path, guard)` mounts a **mandatorily-guarded** admin page (`GET path`, 403 without the guard); `RequestContext::events()` exposes the handle to any route for publishing (`ctx.events().unwrap().emit(MyEvent { .. })`). (`adapto_app/src/lib.rs`, `handler.rs`)
+- **adapto_ml** — new crate: small, dependency-light ML primitives (serde only, pure Rust, no GPU) for forecast bias-correction and similar regression tasks.
+  - `StandardScaler` — per-feature standardization (population std; zero-variance columns pass through as `x − mean`).
+  - `RidgeRegression` — L2-regularized linear regression with built-in scaling; fits via the normal equations `(ZᵀZ + λI)w = Zᵀ(y − ȳ)` solved by Gaussian elimination with partial pivoting; centered-target intercept. `fit` / `predict` / `to_json` / `from_json` (models persist in `adapto_store`). `MlError` for empty/dim-mismatch/singular/serde.
+  - 6 unit tests + 1 doctest. Consumed by myqaz's MOS weather ensemble (per-city, per-variable bias-correction blending Open-Meteo ICON/GFS/ECMWF/GEM).
 - **adapto_scheduler** — new crate: a persistent, priority + lane background-job scheduler.
   - `Schedule` enum — `Interval`, `DailyAt`, `WeeklyOn`, `MonthlyOn`, plus a `Cron(String)` escape hatch; all timezone-aware via `next_after`.
   - Two lanes: `Light` (configurable worker pool, default 4) and `Heavy` (serial); `Priority` orders ready jobs within a lane.

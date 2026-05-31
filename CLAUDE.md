@@ -12,6 +12,7 @@ Adapto is a Rust web framework for building data-driven sites and apps. Workspac
 | Crate | Purpose | Status |
 |-------|---------|--------|
 | `adapto_store` | Embedded document DB (JSON docs, BTree indexes, WAL) | Production |
+| `adapto_events` | In-process typed pub/sub bus (durable/ephemeral, throttle, dead-letter) | WIP |
 | `adapto_app` | HTTP app builder (axum-based, routes, WebSocket, fallbacks) | Production |
 | `adapto_ui` | HTML component library, `html_escape()` | Production |
 | `adapto_macros` | Derive macros for `#[derive(Resource)]` | WIP |
