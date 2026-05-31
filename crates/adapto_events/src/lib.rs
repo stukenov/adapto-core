@@ -6,5 +6,6 @@
 
 pub mod event;
 mod state;
+mod throttle;
 
 pub use event::{Event, EventEnvelope, EventError};
