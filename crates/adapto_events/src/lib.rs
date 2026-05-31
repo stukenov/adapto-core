@@ -5,5 +5,6 @@
 //! See the design spec at `docs/superpowers/specs/2026-05-31-event-bus-design.md`.
 
 pub mod event;
+mod state;
 
 pub use event::{Event, EventEnvelope, EventError};
