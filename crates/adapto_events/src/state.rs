@@ -166,6 +166,14 @@ pub fn gc_events(store: &AdaptoStore, topic: &str, min_seq: u64) {
     let _ = store.collection(EVENTS).delete(q);
 }
 
+/// Count dead-letter rows for a subscription.
+pub fn deadletter_count(store: &AdaptoStore, subscription: &str) -> u64 {
+    store
+        .collection(DEADLETTER)
+        .count(Query::eq("subscription", subscription))
+        .unwrap_or(0)
+}
+
 /// Delete dead-letter rows older than `before`.
 pub fn prune_deadletter(store: &AdaptoStore, before: DateTime<Utc>) {
     let q = Query::filter(Filter::Lt("failed_at".into(), serde_json::json!(before)));
