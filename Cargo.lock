@@ -752,6 +752,7 @@ dependencies = [
  "adapto_app",
  "adapto_events",
  "adapto_store",
+ "adapto_ui",
  "serde",
  "serde_json",
  "tokio",

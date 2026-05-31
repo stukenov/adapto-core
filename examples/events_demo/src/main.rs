@@ -75,7 +75,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(h) = ctx.events() {
                 h.emit(PageViewed { path: path.clone() });
             }
-            PageResponse::Ok(format!("<h1>{path}</h1><p>view recorded</p>"))
+            // Escape the (attacker-controlled) request path before rendering.
+            let safe = adapto_ui::html_escape(&path);
+            PageResponse::Ok(format!("<h1>{safe}</h1><p>view recorded</p>"))
         })
         .page("/stats", move |_ctx| {
             PageResponse::Ok(format!(
@@ -89,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .collection("scrape_tasks")
                 .find(Query::new())
                 .filter_map(|d| d.data.get("url").and_then(|v| v.as_str()).map(String::from))
-                .map(|u| format!("<li>{u}</li>"))
+                .map(|u| format!("<li>{}</li>", adapto_ui::html_escape(&u)))
                 .collect();
             PageResponse::Ok(format!("<h1>Scrape queue ({n})</h1><ul>{}</ul>", rows.join("")))
         })
