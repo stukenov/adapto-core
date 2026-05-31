@@ -4,10 +4,12 @@
 //!
 //! See the design spec at `docs/superpowers/specs/2026-05-31-event-bus-design.md`.
 
+mod bus;
 pub mod event;
 mod state;
 mod subscription;
 mod throttle;
 
+pub use bus::{EventBus, EventBusHandle};
 pub use event::{Event, EventEnvelope, EventError};
 pub use subscription::{Mode, Subscription};
