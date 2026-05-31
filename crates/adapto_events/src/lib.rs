@@ -5,6 +5,7 @@
 //! See the design spec at `docs/superpowers/specs/2026-05-31-event-bus-design.md`.
 
 mod bus;
+mod dispatch;
 pub mod event;
 mod state;
 mod subscription;

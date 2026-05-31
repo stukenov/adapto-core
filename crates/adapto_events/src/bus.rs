@@ -80,8 +80,7 @@ impl EventBus {
             .collect();
         let (tx, _rx) = broadcast::channel(self.broadcast_capacity);
 
-        let _ = (self.gc_interval, self.retention); // consumed by dispatchers (Task 6/7)
-        EventBusHandle {
+        let handle = EventBusHandle {
             inner: Arc::new(HandleInner {
                 store: self.store.clone(),
                 tx,
@@ -90,7 +89,9 @@ impl EventBus {
                 subscribers: self.subscribers.clone(),
                 now_fn: self.now_fn,
             }),
-        }
+        };
+        crate::dispatch::start(&handle, &self.subscribers, self.gc_interval, self.retention);
+        handle
     }
 }
 
