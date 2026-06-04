@@ -90,6 +90,10 @@ struct Doc {
     field_tokens: [Vec<String>; N_FIELDS],
     /// BM25F weighted document length: Σ_field w_field · |tokens_field|. Set in `build`.
     weighted_len: f32,
+    /// Whether this doc participates in prefix [`SearchIndex::suggest`]. Search always sees it;
+    /// huge low-priority corpora (companies, deep document trees) opt out so the typeahead scan
+    /// stays small while the document is still findable on the full results page.
+    suggestable: bool,
 }
 
 /// One token occurrence in one document: per-field term frequencies.
@@ -112,6 +116,9 @@ pub struct SearchIndex {
     idf: HashMap<String, f32>,
     /// Mean weighted document length, for BM25 length normalization.
     avg_weighted_len: f32,
+    /// Indices of suggestable docs, in insertion order. `suggest` scans only these so a large
+    /// search-only corpus doesn't slow the typeahead.
+    suggest_ids: Vec<u32>,
     built: bool,
 }
 
@@ -123,12 +130,24 @@ impl SearchIndex {
             postings: HashMap::new(),
             idf: HashMap::new(),
             avg_weighted_len: 0.0,
+            suggest_ids: Vec::new(),
             built: false,
         }
     }
 
-    /// Add a document. `id` and `payload` are returned verbatim in results.
+    /// Add a document that appears in both `suggest` and `search`. `id` and `payload` are returned
+    /// verbatim in results.
     pub fn add(&mut self, id: &str, fields: TextFields, payload: Value) {
+        self.add_doc(id, fields, payload, true);
+    }
+
+    /// Add a search-only document: found by [`SearchIndex::search`] but excluded from the typeahead
+    /// [`SearchIndex::suggest`] scan. Use for large, low-priority corpora.
+    pub fn add_search_only(&mut self, id: &str, fields: TextFields, payload: Value) {
+        self.add_doc(id, fields, payload, false);
+    }
+
+    fn add_doc(&mut self, id: &str, fields: TextFields, payload: Value, suggestable: bool) {
         let suggest_text = normalize(&format!("{} {}", fields.title, fields.keywords));
         let field_tokens = [
             index_tokens(fields.title, &self.config),
@@ -141,6 +160,7 @@ impl SearchIndex {
             suggest_text,
             field_tokens,
             weighted_len: 0.0,
+            suggestable,
         });
         self.built = false;
     }
@@ -190,6 +210,22 @@ impl SearchIndex {
         } else {
             total_len / self.docs.len() as f32
         };
+
+        // Suggest scans only suggestable docs, so a large search-only corpus doesn't slow typeahead.
+        self.suggest_ids = self
+            .docs
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.suggestable)
+            .map(|(i, _)| i as u32)
+            .collect();
+
+        // Per-doc token lists were only needed to build postings; search uses the inverted index
+        // and suggest uses `suggest_text`. Drop them so a large corpus doesn't hold them in RAM.
+        for doc in &mut self.docs {
+            doc.field_tokens = std::array::from_fn(|_| Vec::new());
+        }
+
         self.built = true;
     }
 
@@ -207,7 +243,9 @@ impl SearchIndex {
         let qtokens: Vec<&str> = q.split_whitespace().collect();
 
         let mut ranked: Vec<(f32, usize)> = Vec::new();
-        for (i, doc) in self.docs.iter().enumerate() {
+        for &doc_id in &self.suggest_ids {
+            let i = doc_id as usize;
+            let doc = &self.docs[i];
             let words: Vec<&str> = doc.suggest_text.split_whitespace().collect();
             let matches = qtokens
                 .iter()
@@ -489,5 +527,34 @@ mod tests {
         assert!(idx.search("", 5).is_empty(), "empty query → no hits");
         assert!(idx.suggest("", 5).is_empty(), "empty prefix → no suggestions");
         assert!(idx.search("закон", 0).is_empty(), "limit 0 → no hits");
+    }
+
+    #[test]
+    fn search_only_doc_is_searchable_but_not_suggested() {
+        let mut idx = SearchIndex::new(SearchConfig::default());
+        add(&mut idx, "top", "Закон об образовании", "", "");
+        idx.add_search_only(
+            "deep",
+            TextFields {
+                title: "Статья 5 Закона об образовании",
+                keywords: "",
+                body: "",
+            },
+            json!({ "title": "Статья 5" }),
+        );
+        idx.build();
+
+        let hits = idx.search("образование", 10);
+        assert!(
+            hits.iter().any(|h| h.id == "deep"),
+            "search-only doc must be findable via search"
+        );
+
+        let s = idx.suggest("закон", 10);
+        assert!(s.iter().any(|x| x.id == "top"), "suggestable doc appears in suggest");
+        assert!(
+            s.iter().all(|x| x.id != "deep"),
+            "search-only doc must NOT appear in suggest"
+        );
     }
 }
