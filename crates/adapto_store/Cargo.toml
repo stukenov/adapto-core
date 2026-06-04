@@ -24,6 +24,7 @@ rmp-serde = "1"
 [features]
 default = []
 vector = []
+search = []
 
 [[bench]]
 name = "benchmark"

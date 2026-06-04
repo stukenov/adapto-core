@@ -355,25 +355,38 @@ impl RequestContext {
 }
 
 fn urlencoding_decode(s: &str) -> String {
-    let s = s.replace('+', " ");
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            let hex: String = chars.by_ref().take(2).collect();
-            if hex.len() == 2 {
-                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                    result.push(byte as char);
-                    continue;
+    // A percent-encoded value is a byte stream: `%D1%83` is two UTF-8 bytes of one codepoint,
+    // not two codepoints. Decode into bytes first, then reassemble as UTF-8 — otherwise any
+    // non-ASCII input (Cyrillic, Kazakh, emoji) turns into Latin-1 mojibake.
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' if i + 2 < bytes.len() => {
+                let hex = &s[i + 1..i + 3];
+                match u8::from_str_radix(hex, 16) {
+                    Ok(byte) => {
+                        out.push(byte);
+                        i += 3;
+                    }
+                    Err(_) => {
+                        out.push(b'%');
+                        i += 1;
+                    }
                 }
             }
-            result.push('%');
-            result.push_str(&hex);
-        } else {
-            result.push(c);
+            b => {
+                out.push(b);
+                i += 1;
+            }
         }
     }
-    result
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 // ---------------------------------------------------------------------------
@@ -1784,6 +1797,13 @@ mod tests {
         assert_eq!(urlencoding_decode("hello+world"), "hello world");
         assert_eq!(urlencoding_decode("test%20value"), "test value");
         assert_eq!(urlencoding_decode("a%26b"), "a&b");
+        // Multibyte UTF-8: a percent-escaped sequence is a stream of BYTES, not codepoints.
+        // "уголовный" and "заңдар" must round-trip, not turn into Latin-1 mojibake.
+        assert_eq!(
+            urlencoding_decode("%D1%83%D0%B3%D0%BE%D0%BB%D0%BE%D0%B2%D0%BD%D1%8B%D0%B9"),
+            "уголовный"
+        );
+        assert_eq!(urlencoding_decode("%D0%B7%D0%B0%D2%A3%D0%B4%D0%B0%D1%80"), "заңдар");
     }
 
     #[tokio::test]

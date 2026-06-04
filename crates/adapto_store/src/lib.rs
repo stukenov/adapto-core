@@ -26,6 +26,8 @@ pub mod tenant;
 #[cfg(feature = "vector")]
 pub mod vector;
 pub mod wal;
+#[cfg(feature = "search")]
+pub mod search;
 
 // Re-exports for a clean public API.
 pub use cursor::Cursor;
@@ -41,6 +43,9 @@ pub use vector::{
     AddressResult, NormalizeResult, ParsedAddress, VectorIndex, extract_prefix, extract_quoted,
     parse_address,
 };
+
+#[cfg(feature = "search")]
+pub use search::{Hit, SearchConfig, SearchIndex, Suggestion, TextFields};
 
 use engine::StorageEngine;
 use serde_json::Value;
