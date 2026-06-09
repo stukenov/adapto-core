@@ -42,6 +42,12 @@ pub struct SearchConfig {
     pub ngrams: bool,
     /// Character n-gram size.
     pub ngram_size: usize,
+    /// Coordination exponent β. When > 0, a document's BM25F score is multiplied by
+    /// `(matched_query_words / total_query_words)^β`, and — once any document matches a whole query
+    /// word — documents that matched only via n-grams are dropped. This rewards documents covering
+    /// more of the query and removes the trigram-fuzzy "always N results" tail. `0.0` (default)
+    /// disables coordination entirely (legacy behavior: pure BM25F over words + n-grams).
+    pub coord_beta: f32,
 }
 
 impl Default for SearchConfig {
@@ -54,6 +60,7 @@ impl Default for SearchConfig {
             w_body: 1.0,
             ngrams: true,
             ngram_size: 3,
+            coord_beta: 0.0,
         }
     }
 }
@@ -119,6 +126,10 @@ pub struct SearchIndex {
     /// Indices of suggestable docs, in insertion order. `suggest` scans only these so a large
     /// search-only corpus doesn't slow the typeahead.
     suggest_ids: Vec<u32>,
+    /// Sorted, distinct indexed *word* tokens (n-grams excluded). Lets `search` expand a query word
+    /// to every document word it prefixes (binary-searched), so coordination matches stems and
+    /// inflections — `"тукенов"` → `"тукеновна"` — the way `suggest` already does.
+    word_vocab: Vec<String>,
     built: bool,
 }
 
@@ -131,6 +142,7 @@ impl SearchIndex {
             idf: HashMap::new(),
             avg_weighted_len: 0.0,
             suggest_ids: Vec::new(),
+            word_vocab: Vec::new(),
             built: false,
         }
     }
@@ -195,6 +207,11 @@ impl SearchIndex {
                         tf,
                     });
             }
+
+            // Free this doc's token lists immediately — postings are built, and neither search (uses
+            // the inverted index) nor suggest (uses suggest_text) needs them. Clearing here instead
+            // of after the whole pass keeps peak build memory flat for very large corpora.
+            doc.field_tokens = std::array::from_fn(|_| Vec::new());
         }
 
         // Pass 2: IDF per token. Robertson/Sparck-Jones BM25 idf (always positive via +1).
@@ -220,13 +237,24 @@ impl SearchIndex {
             .map(|(i, _)| i as u32)
             .collect();
 
-        // Per-doc token lists were only needed to build postings; search uses the inverted index
-        // and suggest uses `suggest_text`. Drop them so a large corpus doesn't hold them in RAM.
-        for doc in &mut self.docs {
-            doc.field_tokens = std::array::from_fn(|_| Vec::new());
-        }
+        // Sorted word vocabulary (n-grams excluded) for prefix-expanded query matching.
+        self.word_vocab = self
+            .postings
+            .keys()
+            .filter(|t| !t.starts_with('#'))
+            .cloned()
+            .collect();
+        self.word_vocab.sort_unstable();
 
         self.built = true;
+    }
+
+    /// Indexed word tokens that start with `prefix` (includes an exact match), as a contiguous
+    /// slice of the sorted vocabulary. O(log n) via binary search.
+    fn prefix_tokens(&self, prefix: &str) -> &[String] {
+        let lo = self.word_vocab.partition_point(|t| t.as_str() < prefix);
+        let run = self.word_vocab[lo..].partition_point(|t| t.starts_with(prefix));
+        &self.word_vocab[lo..lo + run]
     }
 
     /// Tier-1 prefix completion over title + keywords. Cheap; for typeahead widgets.
@@ -287,30 +315,99 @@ impl SearchIndex {
         let (k1, b) = (self.config.k1, self.config.b);
         let avgdl = self.avg_weighted_len.max(1.0);
 
-        // Accumulate BM25F score per candidate document.
-        let mut scores: HashMap<u32, f32> = HashMap::new();
-        let mut seen_query_token = std::collections::HashSet::new();
-        for token in index_tokens(query, &self.config) {
-            if !seen_query_token.insert(token.clone()) {
-                continue; // count each distinct query token once
+        // Distinct query *word* tokens (n-grams excluded), capped at 64 so each gets a coverage bit.
+        let mut q_words: Vec<String> = Vec::new();
+        let mut seen_word = std::collections::HashSet::new();
+        for w in word_tokens(query, self.config.min_or_default()) {
+            if seen_word.insert(w.clone()) {
+                q_words.push(w);
+                if q_words.len() >= 64 {
+                    break;
+                }
             }
-            let Some(plist) = self.postings.get(&token) else {
-                continue;
+        }
+        let n_words = q_words.len() as f32;
+        let coordinate = self.config.coord_beta > 0.0 && n_words > 0.0;
+
+        // Accumulate BM25F score per candidate document (+ which query words each matched).
+        let mut scores: HashMap<u32, f32> = HashMap::new();
+        let mut word_mask: HashMap<u32, u64> = HashMap::new();
+        let score_token = |postings: &HashMap<String, Vec<Posting>>,
+                           idf_map: &HashMap<String, f32>,
+                           docs: &[Doc],
+                           token: &str,
+                           scores: &mut HashMap<u32, f32>,
+                           bit: Option<u64>,
+                           mask: &mut HashMap<u32, u64>| {
+            let Some(plist) = postings.get(token) else {
+                return;
             };
-            let idf = self.idf.get(&token).copied().unwrap_or(0.0);
+            let idf = idf_map.get(token).copied().unwrap_or(0.0);
             for posting in plist {
-                // Weighted term frequency across fields (BM25F: sum then saturate once).
-                let weighted_tf: f32 = (0..N_FIELDS)
-                    .map(|f| field_weights[f] * posting.tf[f] as f32)
-                    .sum();
-                let dl = self.docs[posting.doc as usize].weighted_len;
+                let weighted_tf: f32 =
+                    (0..N_FIELDS).map(|f| field_weights[f] * posting.tf[f] as f32).sum();
+                let dl = docs[posting.doc as usize].weighted_len;
                 let denom = weighted_tf + k1 * (1.0 - b + b * dl / avgdl);
-                let term_score = idf * (weighted_tf * (k1 + 1.0)) / denom.max(f32::EPSILON);
-                *scores.entry(posting.doc).or_default() += term_score;
+                *scores.entry(posting.doc).or_default() +=
+                    idf * (weighted_tf * (k1 + 1.0)) / denom.max(f32::EPSILON);
+                if let Some(bit) = bit {
+                    *mask.entry(posting.doc).or_default() |= bit;
+                }
+            }
+        };
+
+        if coordinate {
+            // Word tokens match by PREFIX (a query word matches any document word it begins), so
+            // "тукенов" finds "Тукеновна" and Kazakh inflections resolve — mirroring `suggest`.
+            for (wi, w) in q_words.iter().enumerate() {
+                let bit = 1u64 << wi;
+                for vt in self.prefix_tokens(w).iter().take(64) {
+                    score_token(&self.postings, &self.idf, &self.docs, vt, &mut scores, Some(bit), &mut word_mask);
+                }
+            }
+            // N-grams still contribute (typo tolerance) but never set a coverage bit.
+            if self.config.ngrams {
+                let mut seen = std::collections::HashSet::new();
+                for ng in char_ngrams(query, self.config.ngram_size, self.config.min_or_default()) {
+                    if seen.insert(ng.clone()) {
+                        score_token(&self.postings, &self.idf, &self.docs, &ng, &mut scores, None, &mut word_mask);
+                    }
+                }
+            }
+        } else {
+            // Legacy path (coord_beta == 0): exact word + n-gram tokens, no coordination.
+            let mut seen = std::collections::HashSet::new();
+            for token in index_tokens(query, &self.config) {
+                if seen.insert(token.clone()) {
+                    score_token(&self.postings, &self.idf, &self.docs, &token, &mut scores, None, &mut word_mask);
+                }
             }
         }
 
-        let mut ranked: Vec<(u32, f32)> = scores.into_iter().filter(|(_, s)| *s > 0.0).collect();
+        // Coordination (E1): reward documents covering more query words; once any document matches a
+        // whole word, drop documents that matched only via n-grams. Off when coord_beta == 0.
+        let any_word_match = word_mask.values().any(|m| *m != 0);
+        // The query has real words but none appear in any document → honest "not found" instead of
+        // an n-gram-fuzzy tail. (Numeric/too-short queries have no word tokens and skip this.)
+        if coordinate && !any_word_match {
+            return Vec::new();
+        }
+        let mut ranked: Vec<(u32, f32)> = scores
+            .into_iter()
+            .filter_map(|(doc, raw)| {
+                if coordinate {
+                    let mask = word_mask.get(&doc).copied().unwrap_or(0);
+                    if mask == 0 {
+                        return None; // n-gram-only match, dropped in favor of word matches
+                    }
+                    let ratio = mask.count_ones() as f32 / n_words;
+                    Some((doc, raw * ratio.powf(self.config.coord_beta)))
+                } else {
+                    Some((doc, raw))
+                }
+            })
+            .filter(|(_, s)| *s > 0.0)
+            .collect();
         ranked.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         ranked.truncate(limit);
         ranked
@@ -428,6 +525,79 @@ mod tests {
 
         assert!(!hits.is_empty(), "expected at least one hit");
         assert_eq!(hits[0].id, "edu", "education law should rank first");
+    }
+
+    #[test]
+    fn coordination_drops_pure_ngram_noise_when_a_word_matches() {
+        // With coord_beta > 0, a doc that shares only character n-grams with the query (no whole
+        // query word) is dropped once any doc matches a real word. Kills the "always N results"
+        // trigram-fuzzy tail. See FRAMEWORK-RESEARCH E1.
+        let cfg = SearchConfig { coord_beta: 1.0, ..SearchConfig::default() };
+        let mut idx = SearchIndex::new(cfg);
+        add(&mut idx, "real", "интерстеллар фильм", "", "");
+        add(&mut idx, "noise", "интересный материал стелла", "", ""); // shares trigrams, no word
+        idx.build();
+
+        let hits = idx.search("интерстеллар", 10);
+
+        assert_eq!(hits.len(), 1, "only the whole-word match survives");
+        assert_eq!(hits[0].id, "real");
+    }
+
+    #[test]
+    fn coordination_returns_empty_when_no_query_word_in_corpus() {
+        // With coordination on, a query whose words are absent from the corpus returns nothing
+        // (honest "not found") instead of a tail of n-gram-fuzzy garbage. See FRAMEWORK-RESEARCH.
+        let cfg = SearchConfig { coord_beta: 1.0, ..SearchConfig::default() };
+        let mut idx = SearchIndex::new(cfg);
+        add(&mut idx, "noise", "интересный материал стелла", "", ""); // trigram overlap, no word
+        idx.build();
+
+        let hits = idx.search("интерстеллар", 10);
+
+        assert!(hits.is_empty(), "no whole-word match anywhere → empty, not fuzzy junk");
+    }
+
+    #[test]
+    fn coordination_matches_word_prefix_like_suggest() {
+        // A query word matches any document word it prefixes, so a surname stem finds its
+        // patronymic ("тукенов" → "Тукеновна"), keeping search consistent with suggest.
+        let cfg = SearchConfig { coord_beta: 1.0, ..SearchConfig::default() };
+        let mut idx = SearchIndex::new(cfg);
+        add(&mut idx, "notary", "Муканова Камшат Тукеновна", "", "");
+        add(&mut idx, "other", "Иванов Иван Иванович", "", "");
+        idx.build();
+
+        let hits = idx.search("тукенов", 10);
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, "notary");
+    }
+
+    #[test]
+    fn coordination_ranks_more_complete_match_first() {
+        let cfg = SearchConfig { coord_beta: 2.0, ..SearchConfig::default() };
+        let mut idx = SearchIndex::new(cfg);
+        add(&mut idx, "both", "Налоговый кодекс", "", "");
+        add(&mut idx, "one", "Гражданский кодекс", "", "");
+        idx.build();
+
+        let hits = idx.search("налоговый кодекс", 5);
+
+        assert_eq!(hits[0].id, "both", "doc matching both query words ranks first");
+    }
+
+    #[test]
+    fn coordination_off_by_default_keeps_ngram_matches() {
+        // coord_beta defaults to 0.0 → legacy behavior: n-gram-only matches are retained.
+        let mut idx = SearchIndex::new(SearchConfig::default());
+        add(&mut idx, "real", "интерстеллар фильм", "", "");
+        add(&mut idx, "noise", "интересный материал стелла", "", "");
+        idx.build();
+
+        let hits = idx.search("интерстеллар", 10);
+
+        assert!(hits.len() >= 2, "default keeps fuzzy n-gram matches (backward compatible)");
     }
 
     #[test]
