@@ -45,6 +45,8 @@ pub enum FallbackResponse {
     Html(String),
     HtmlNotFound(String),
     Raw { body: String, content_type: &'static str },
+    /// 301 Permanent Redirect to the given location.
+    Redirect(String),
     NotFound,
 }
 
@@ -1425,6 +1427,9 @@ impl App {
                                 [(axum::http::header::CONTENT_TYPE, content_type)],
                                 body,
                             ).into_response();
+                        }
+                        FallbackResponse::Redirect(location) => {
+                            return axum::response::Redirect::permanent(&location).into_response();
                         }
                         FallbackResponse::NotFound => {}
                     }
