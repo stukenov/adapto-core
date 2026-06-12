@@ -48,6 +48,14 @@ pub struct SearchConfig {
     /// more of the query and removes the trigram-fuzzy "always N results" tail. `0.0` (default)
     /// disables coordination entirely (legacy behavior: pure BM25F over words + n-grams).
     pub coord_beta: f32,
+    /// Typo fallback. With coordination on, a query whose words match no document
+    /// normally returns empty (honest "not found", no fuzzy tail). When this is
+    /// `true`, such a query instead falls back to ranking by the character-n-gram
+    /// overlap it already computed — so "дебмтор" still surfaces "дебитор". The
+    /// fallback fires ONLY when no whole word matched, so precise queries keep
+    /// their clean word-coordinated ranking. `false` (default) preserves the
+    /// strict behavior.
+    pub fuzzy_fallback: bool,
 }
 
 impl Default for SearchConfig {
@@ -61,6 +69,7 @@ impl Default for SearchConfig {
             ngrams: true,
             ngram_size: 3,
             coord_beta: 0.0,
+            fuzzy_fallback: false,
         }
     }
 }
@@ -387,15 +396,18 @@ impl SearchIndex {
         // Coordination (E1): reward documents covering more query words; once any document matches a
         // whole word, drop documents that matched only via n-grams. Off when coord_beta == 0.
         let any_word_match = word_mask.values().any(|m| *m != 0);
-        // The query has real words but none appear in any document → honest "not found" instead of
-        // an n-gram-fuzzy tail. (Numeric/too-short queries have no word tokens and skip this.)
-        if coordinate && !any_word_match {
+        // The query has real words but none appear in any document. Strict mode → honest "not found"
+        // (no n-gram-fuzzy tail). With `fuzzy_fallback`, fall through and rank by the n-gram overlap
+        // already accumulated in `scores`, so a typo ("дебмтор") still surfaces near words ("дебитор").
+        // (Numeric/too-short queries have no word tokens and skip this.)
+        let fuzzy_only = coordinate && !any_word_match;
+        if fuzzy_only && !self.config.fuzzy_fallback {
             return Vec::new();
         }
         let mut ranked: Vec<(u32, f32)> = scores
             .into_iter()
             .filter_map(|(doc, raw)| {
-                if coordinate {
+                if coordinate && !fuzzy_only {
                     let mask = word_mask.get(&doc).copied().unwrap_or(0);
                     if mask == 0 {
                         return None; // n-gram-only match, dropped in favor of word matches
@@ -403,6 +415,7 @@ impl SearchIndex {
                     let ratio = mask.count_ones() as f32 / n_words;
                     Some((doc, raw * ratio.powf(self.config.coord_beta)))
                 } else {
+                    // Legacy path, or the fuzzy fallback: rank by the raw (n-gram) score.
                     Some((doc, raw))
                 }
             })
@@ -556,6 +569,38 @@ mod tests {
         let hits = idx.search("интерстеллар", 10);
 
         assert!(hits.is_empty(), "no whole-word match anywhere → empty, not fuzzy junk");
+    }
+
+    #[test]
+    fn fuzzy_fallback_surfaces_typo_when_no_word_matches() {
+        // With fuzzy_fallback on, a misspelled query whose words match nothing falls back to the
+        // character-n-gram tail instead of returning empty: "дебмтор" still finds "дебитор".
+        let cfg = SearchConfig { coord_beta: 2.0, fuzzy_fallback: true, ..SearchConfig::default() };
+        let mut idx = SearchIndex::new(cfg);
+        add(&mut idx, "deb", "возмещение дебиторской задолженности", "", "");
+        add(&mut idx, "far", "Государственный реестр лекарственных средств", "", "");
+        idx.build();
+
+        let hits = idx.search("дебмтор", 10);
+
+        assert!(!hits.is_empty(), "typo should fall back to the n-gram-nearest doc");
+        assert_eq!(hits[0].id, "deb", "the trigram-closest doc ranks first");
+    }
+
+    #[test]
+    fn fuzzy_fallback_does_not_change_precise_queries() {
+        // When a real word matches, fuzzy_fallback is inert — the word-coordinated ranking stands
+        // and n-gram-only docs are still dropped.
+        let cfg = SearchConfig { coord_beta: 2.0, fuzzy_fallback: true, ..SearchConfig::default() };
+        let mut idx = SearchIndex::new(cfg);
+        add(&mut idx, "real", "интерстеллар фильм", "", "");
+        add(&mut idx, "noise", "интересный материал стелла", "", "");
+        idx.build();
+
+        let hits = idx.search("интерстеллар", 10);
+
+        assert_eq!(hits.len(), 1, "word match → fallback inert, n-gram noise still dropped");
+        assert_eq!(hits[0].id, "real");
     }
 
     #[test]
