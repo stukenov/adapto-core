@@ -313,8 +313,28 @@ impl SearchIndex {
             .collect()
     }
 
-    /// Tier-2 BM25F relevance ranking over all fields. For results pages.
+    /// Tier-2 BM25F relevance ranking over all fields. For results pages. Uses the index's
+    /// configured `fuzzy_fallback`. Prefer the explicit [`Self::search_strict`] /
+    /// [`Self::search_fuzzy`] when a caller wants to try a clean strict pass across several indexes
+    /// before falling back to typo matching (so the fuzzy tail of one index can't drown another
+    /// index's exact word matches).
     pub fn search(&self, query: &str, limit: usize) -> Vec<Hit> {
+        self.search_impl(query, limit, self.config.fuzzy_fallback)
+    }
+
+    /// Strict ranking: a query whose words match no document returns empty (no n-gram-fuzzy tail),
+    /// regardless of `fuzzy_fallback`.
+    pub fn search_strict(&self, query: &str, limit: usize) -> Vec<Hit> {
+        self.search_impl(query, limit, false)
+    }
+
+    /// Fuzzy ranking: when no whole word matches, fall back to the trigram-nearest documents.
+    /// Use as a last resort (after a strict pass across all indexes came back empty).
+    pub fn search_fuzzy(&self, query: &str, limit: usize) -> Vec<Hit> {
+        self.search_impl(query, limit, true)
+    }
+
+    fn search_impl(&self, query: &str, limit: usize, fuzzy_fallback: bool) -> Vec<Hit> {
         debug_assert!(self.built, "call build() before search()");
         if !self.built || limit == 0 {
             return Vec::new();
@@ -401,7 +421,7 @@ impl SearchIndex {
         // already accumulated in `scores`, so a typo ("дебмтор") still surfaces near words ("дебитор").
         // (Numeric/too-short queries have no word tokens and skip this.)
         let fuzzy_only = coordinate && !any_word_match;
-        if fuzzy_only && !self.config.fuzzy_fallback {
+        if fuzzy_only && !fuzzy_fallback {
             return Vec::new();
         }
         let mut ranked: Vec<(u32, f32)> = scores
