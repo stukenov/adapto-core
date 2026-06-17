@@ -1,7 +1,10 @@
 # Adapto
 
-[![crates.io](https://img.shields.io/crates/v/adapto_store.svg)](https://crates.io/crates/adapto_store)
-[![license](https://img.shields.io/crates/l/adapto_store.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![Crates](https://img.shields.io/badge/workspace-18%20crates-success.svg)](#crates)
+
+> **Build full-stack, data-driven web apps in pure Rust — no JavaScript build step, no external database.**
 
 A full-stack Rust web framework for building data-driven sites and apps. Embedded document database, HTTP routing, component UI, template DSL, live updates, authentication, audit logging — 18 crates, one workspace.
 
@@ -11,55 +14,66 @@ A full-stack Rust web framework for building data-driven sites and apps. Embedde
 
 ### Core
 
-| Crate | Version | Description |
-|-------|---------|-------------|
-| [`adapto`](crates/adapto) | [![](https://img.shields.io/crates/v/adapto.svg)](https://crates.io/crates/adapto) | Umbrella re-export with feature flags |
-| [`adapto_store`](crates/adapto_store) | [![](https://img.shields.io/crates/v/adapto_store.svg)](https://crates.io/crates/adapto_store) | Embedded document DB — JSON, BTree indexes, WAL, mmap |
-| [`adapto_app`](crates/adapto_app) | [![](https://img.shields.io/crates/v/adapto_app.svg)](https://crates.io/crates/adapto_app) | HTTP app builder on axum — routes, multilingual, WebSocket |
-| [`adapto_ui`](crates/adapto_ui) | [![](https://img.shields.io/crates/v/adapto_ui.svg)](https://crates.io/crates/adapto_ui) | HTML component library + `html_escape()` |
-| [`adapto_macros`](crates/adapto_macros) | [![](https://img.shields.io/crates/v/adapto_macros.svg)](https://crates.io/crates/adapto_macros) | `#[derive(Resource)]` proc macro |
+| Crate | Description |
+|-------|-------------|
+| [`adapto`](crates/adapto) | Umbrella re-export with feature flags |
+| [`adapto_store`](crates/adapto_store) | Embedded document DB — JSON, BTree indexes, WAL, mmap |
+| [`adapto_app`](crates/adapto_app) | HTTP app builder on axum — routes, multilingual, WebSocket |
+| [`adapto_ui`](crates/adapto_ui) | HTML component library + `html_escape()` |
+| [`adapto_macros`](crates/adapto_macros) | `#[derive(Resource)]` proc macro |
 
 ### Security & Compliance
 
-| Crate | Version | Description |
-|-------|---------|-------------|
-| [`adapto_auth`](crates/adapto_auth) | [![](https://img.shields.io/crates/v/adapto_auth.svg)](https://crates.io/crates/adapto_auth) | Passwords (PBKDF2), JWT, sessions, CSRF, RBAC, rate limiting |
-| [`adapto_audit`](crates/adapto_audit) | [![](https://img.shields.io/crates/v/adapto_audit.svg)](https://crates.io/crates/adapto_audit) | Structured audit events, sinks, PII redaction |
-| [`adapto_forms`](crates/adapto_forms) | [![](https://img.shields.io/crates/v/adapto_forms.svg)](https://crates.io/crates/adapto_forms) | Schema validation, cross-field rules, sanitizers |
+| Crate | Description |
+|-------|-------------|
+| [`adapto_auth`](crates/adapto_auth) | Passwords (PBKDF2), JWT, sessions, CSRF, RBAC, rate limiting |
+| [`adapto_audit`](crates/adapto_audit) | Structured audit events, sinks, PII redaction |
+| [`adapto_forms`](crates/adapto_forms) | Schema validation, cross-field rules, sanitizers |
 
 ### Data & AI
 
-| Crate | Version | Description |
-|-------|---------|-------------|
-| [`adapto_db`](crates/adapto_db) | [![](https://img.shields.io/crates/v/adapto_db.svg)](https://crates.io/crates/adapto_db) | Database pool trait, SQL generation, migrations |
-| [`adapto_ai`](crates/adapto_ai) | [![](https://img.shields.io/crates/v/adapto_ai.svg)](https://crates.io/crates/adapto_ai) | LLM client trait, prompt templates, response caching |
+| Crate | Description |
+|-------|-------------|
+| [`adapto_db`](crates/adapto_db) | Database pool trait, SQL generation, migrations |
+| [`adapto_ai`](crates/adapto_ai) | LLM client trait, prompt templates, response caching |
 
 ### DSL Pipeline
 
-| Crate | Version | Description |
-|-------|---------|-------------|
-| [`adapto_parser`](crates/adapto_parser) | [![](https://img.shields.io/crates/v/adapto_parser.svg)](https://crates.io/crates/adapto_parser) | `.adapto` template parser (pest PEG) |
-| [`adapto_compiler`](crates/adapto_compiler) | [![](https://img.shields.io/crates/v/adapto_compiler.svg)](https://crates.io/crates/adapto_compiler) | AST → ComponentIR, dependency graphs |
-| [`adapto_ssr`](crates/adapto_ssr) | [![](https://img.shields.io/crates/v/adapto_ssr.svg)](https://crates.io/crates/adapto_ssr) | Server-side rendering, page wrapping |
-| [`adapto_live`](crates/adapto_live) | [![](https://img.shields.io/crates/v/adapto_live.svg)](https://crates.io/crates/adapto_live) | WebSocket sessions, DOM patches, action interpreter |
-| [`adapto_runtime`](crates/adapto_runtime) | [![](https://img.shields.io/crates/v/adapto_runtime.svg)](https://crates.io/crates/adapto_runtime) | StateStore, Ctx, permissions, types |
-| [`adapto_client_protocol`](crates/adapto_client_protocol) | [![](https://img.shields.io/crates/v/adapto_client_protocol.svg)](https://crates.io/crates/adapto_client_protocol) | WebSocket protocol types |
+| Crate | Description |
+|-------|-------------|
+| [`adapto_parser`](crates/adapto_parser) | `.adapto` template parser (pest PEG) |
+| [`adapto_compiler`](crates/adapto_compiler) | AST → ComponentIR, dependency graphs |
+| [`adapto_ssr`](crates/adapto_ssr) | Server-side rendering, page wrapping |
+| [`adapto_live`](crates/adapto_live) | WebSocket sessions, DOM patches, action interpreter |
+| [`adapto_runtime`](crates/adapto_runtime) | StateStore, Ctx, permissions, types |
+| [`adapto_client_protocol`](crates/adapto_client_protocol) | WebSocket protocol types |
 
 ### Tooling
 
-| Crate | Version | Description |
-|-------|---------|-------------|
-| [`adapto_cli`](crates/adapto_cli) | [![](https://img.shields.io/crates/v/adapto_cli.svg)](https://crates.io/crates/adapto_cli) | CLI: new, dev, build, check, generate |
-| [`adapto_test_utils`](crates/adapto_test_utils) | [![](https://img.shields.io/crates/v/adapto_test_utils.svg)](https://crates.io/crates/adapto_test_utils) | Builders, fixtures, mocks, assertions |
+| Crate | Description |
+|-------|-------------|
+| [`adapto_cli`](crates/adapto_cli) | CLI: new, dev, build, check, generate |
+| [`adapto_test_utils`](crates/adapto_test_utils) | Builders, fixtures, mocks, assertions |
 
 ## Quick Start
 
+Add Adapto to your `Cargo.toml` as a Git dependency:
+
 ```toml
 [dependencies]
-adapto = { version = "0.2", features = ["full"] }
+adapto = { git = "https://github.com/stukenov/adapto-core", features = ["full"] }
 # or pick individual crates:
-# adapto_app = "0.2"
-# adapto_store = "0.2"
+# adapto_app   = { git = "https://github.com/stukenov/adapto-core" }
+# adapto_store = { git = "https://github.com/stukenov/adapto-core" }
+```
+
+Prefer to explore first? Clone the repo and run a bundled example:
+
+```bash
+git clone https://github.com/stukenov/adapto-core
+cd adapto-core
+cargo run -p example-counter --bin counter-server   # live counter demo
+cargo test --workspace                              # run the full test suite
 ```
 
 ```rust
@@ -202,6 +216,18 @@ Build on macOS for Linux deployment:
 cargo install cargo-zigbuild
 cargo zigbuild --release --target x86_64-unknown-linux-gnu
 ```
+
+## Related projects
+
+Part of the **Adapto ecosystem**:
+
+- [**adapto-vscode**](https://github.com/stukenov/adapto-vscode) — VS Code extension with syntax highlighting and tooling for the `.adapto` DSL.
+- [**adapto-digital-tv**](https://github.com/stukenov/adapto-digital-tv) — Digital TV / signage app built on Adapto.
+
+More Rust projects by the same author:
+
+- [**rav2d**](https://github.com/stukenov/rav2d) — 2D graphics / rendering in Rust.
+- [**pigeon**](https://github.com/stukenov/pigeon) — lightweight messaging in Rust.
 
 ## License
 
