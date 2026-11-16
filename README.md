@@ -222,12 +222,11 @@ cargo zigbuild --release --target x86_64-unknown-linux-gnu
 Part of the **Adapto ecosystem**:
 
 - [**adapto-vscode**](https://github.com/stukenov/adapto-vscode) — VS Code extension with syntax highlighting and tooling for the `.adapto` DSL.
-- [**adapto-digital-tv**](https://github.com/stukenov/adapto-digital-tv) — Digital TV / signage app built on Adapto.
+- [**adapto-digital-tv**](https://github.com/stukenov/adapto-digital-tv) — self-hosted platform for TV channels, VOD and live streaming.
 
 More Rust projects by the same author:
 
-- [**rav2d**](https://github.com/stukenov/rav2d) — 2D graphics / rendering in Rust.
-- [**pigeon**](https://github.com/stukenov/pigeon) — lightweight messaging in Rust.
+- [**rav2d**](https://github.com/stukenov/rav2d) — memory-safe AV2 video decoder in Rust.
 
 ## License
 
